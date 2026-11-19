@@ -18,7 +18,8 @@ button,.file{background:var(--acc);color:#fff;border:0;border-radius:10px;paddin
 .stage{position:relative;width:100%}video{width:100%;display:block;border-radius:10px;background:#000}
 #ov{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .rec{font-size:17px;font-weight:600}.rec span{color:var(--g)}
-.lanes{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:8px}
+.lanes{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:5px}
+@media(max-width:520px){.lane{padding:6px 2px!important}.lane .v{font-size:18px!important}.lane .n,.lane .f,.lane .u{font-size:10px!important}}
 .lane{background:#20242c;border-radius:10px;padding:8px;text-align:center;border:2px solid transparent}
 .lane.best{border-color:var(--g)}.lane .n{font-size:12px;color:var(--mut)}.lane .v{font-size:20px;font-weight:700}.lane .f{font-size:11px;color:var(--mut)}
 .ctrl{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:13px;margin-top:8px}
@@ -48,17 +49,18 @@ a{color:var(--acc)}
 <div class="card">
 <div class="stage"><video id="v" playsinline muted loop></video><canvas id="ov"></canvas></div>
 <div class="ctrl">
-<label>Carriles <select id="nl"><option>2</option><option>3</option><option selected>4</option><option>5</option></select></label>
+<label>Carriles <select id="nl"><option value="auto" selected>Auto</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+<label><input type="checkbox" id="voice" checked> Avisos por voz</label>
 <label>Vista <select id="view"><option value="dash">Desde el carro</option><option value="fixed">Cámara fija / puente</option></select></label>
 <label id="egoL">Tu velocidad <input type="range" id="ego" min="0" max="80" value="20"> <b id="egoV">20</b> km/h</label>
 </div>
-<div class="note" style="margin-top:6px">Arrastra los puntos blancos para acomodar las líneas de los carriles sobre el video (el de arriba es el punto de fuga).</div>
+<div class="note" style="margin-top:6px" id="hint">En <b>Auto</b> la app detecta cuántos carriles hay según por dónde pasan los coches (tarda unos segundos). Si quieres, puedes ajustar a mano arrastrando los puntos blancos; al hacerlo se fija el número de carriles.</div>
 </div>
 
 <div class="card"><div class="lanes" id="lanes"></div></div>
 
 <div class="card note">
-<b>Cómo mide:</b> un modelo COCO-SSD detecta coches, autobuses y camiones en cada cuadro, directo en tu teléfono: el video no se sube a ningún lado. A cada coche se le asigna un carril según dónde están sus llantas respecto a las líneas. Para la velocidad, compara su tamaño de un cuadro a otro: si se hace más chico, se está alejando. Esa velocidad relativa se suma a la tuya, que sale del GPS si usas la cámara o del control si usas un video.<br>
+<b>Manos libres:</b> con la cámara, tu velocidad sale del GPS, los carriles se detectan solos, la pantalla se queda encendida y los avisos son por voz. Pon el celular en el soporte, apuntando al frente.<br><br><b>Cómo mide:</b> un modelo COCO-SSD detecta coches, autobuses y camiones en cada cuadro, directo en tu teléfono: el video no se sube a ningún lado. A cada coche se le asigna un carril según dónde están sus llantas respecto a las líneas. Para la velocidad, compara su tamaño de un cuadro a otro: si se hace más chico, se está alejando. Esa velocidad relativa se suma a la tuya, que sale del GPS si usas la cámara o del control si usas un video.<br>
 En vista de cámara fija, la velocidad es la del movimiento hacia arriba o hacia abajo en la imagen (relativa entre carriles).<br>
 Los números son aproximados: sirven para comparar los carriles entre sí, no como un velocímetro.
 </div>
@@ -73,15 +75,19 @@ const colors=['#5b8cff','#f2994a','#bb6bd9','#56ccf2','#2fbf71'];
 let model=null,running=false,tracks=[],nextId=0,est=[],gpsV=null,usingCam=false,paused=false;
 // geometría de carriles en coordenadas normalizadas (0..1)
 let vp={x:0.5,y:0.42},bottom=[];
-function initLanes(){const n=+$('nl').value;bottom=[];for(let i=0;i<=n;i++)bottom.push(0.05+0.9*i/n);est=Array(n).fill(null);tracks=[];renderLanes([])}
+let autoLanes=true,samples=[],lastFit=0,lastSpoken='',lastSpeak=0,wake=null;
+function setN(n){bottom=[];for(let i=0;i<=n;i++)bottom.push(0.05+0.9*i/n);est=Array(n).fill(null);tracks=[];renderLanes([])}
+function initLanes(){autoLanes=$('nl').value==='auto';samples=[];setN(autoLanes?3:+$('nl').value)}
+function oldInit(){const n=4;bottom=[];for(let i=0;i<=n;i++)bottom.push(0.05+0.9*i/n);est=Array(n).fill(null);tracks=[];renderLanes([])}
 $('nl').onchange=initLanes;initLanes();
 $('ego').oninput=()=>$('egoV').textContent=$('ego').value;
-$('view').onchange=()=>{$('egoL').style.display=$('view').value==='dash'?'flex':'none';est=est.map(()=>null)};
+$('view').onchange=()=>{$('egoL').style.display=($('view').value==='dash'&&!usingCam)?'flex':'none';est=est.map(()=>null)};
 
 cocoSsd.load({base:'lite_mobilenet_v2'}).then(m=>{model=m;$('status').textContent='Modelo listo ✅';}).catch(e=>$('status').textContent='No se pudo cargar el modelo: '+e.message);
 
-$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;stopCam();v.srcObject=null;v.src=URL.createObjectURL(f);v.play();start()};
-$('cam').onclick=async()=>{try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});v.src='';v.srcObject=s;usingCam=true;await v.play();start();
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;stopCam();v.srcObject=null;v.src=URL.createObjectURL(f);v.play();start();if($('view').value==='dash')$('egoL').style.display='flex'};
+$('cam').onclick=async()=>{try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});v.src='';v.srcObject=s;usingCam=true;await v.play();start();$('egoL').style.display='none';
+  try{wake=await navigator.wakeLock.request('screen')}catch(e){}
   if(navigator.geolocation)navigator.geolocation.watchPosition(p=>{if(p.coords.speed!=null)gpsV=p.coords.speed*3.6},()=>{}, {enableHighAccuracy:true})}catch(e){$('status').textContent='No se pudo abrir la cámara: '+e.message}};
 function stopCam(){if(v.srcObject){v.srcObject.getTracks().forEach(t=>t.stop());usingCam=false}}
 $('pause').onclick=()=>{paused=!paused;paused?v.pause():v.play();$('pause').textContent=paused?'▶︎':'⏸︎'};
@@ -95,6 +101,7 @@ let drag=null;
 function pt(e){const r=ov.getBoundingClientRect();const p=e.touches?e.touches[0]:e;return{x:(p.clientX-r.left)/r.width,y:(p.clientY-r.top)/r.height}}
 ov.addEventListener('pointerdown',e=>{const p=pt(e);const W=ov.clientWidth,H=ov.clientHeight;
   if(Math.hypot((p.x-vp.x)*W,(p.y-vp.y)*H)<22){drag='vp';return}
+  if(autoLanes){autoLanes=false;$('nl').value=String(bottom.length-1)}
   bottom.forEach((b,i)=>{if(Math.hypot((p.x-b)*W,(p.y-0.97)*H)<22)drag=i})});
 ov.addEventListener('pointermove',e=>{if(drag===null)return;const p=pt(e);if(drag==='vp'){vp.x=Math.min(.95,Math.max(.05,p.x));vp.y=Math.min(.8,Math.max(.05,p.y))}else bottom[drag]=p.x});
 addEventListener('pointerup',()=>drag=null);
@@ -112,7 +119,8 @@ async function loop(){
     const used=new Set();
     for(const p of preds){const b=[p.bbox[0]/W,p.bbox[1]/H,p.bbox[2]/W,p.bbox[3]/H];let best=null,bi=0.25;
       for(const tr of tracks){if(used.has(tr))continue;const s=iou(b,tr.b);if(s>bi){bi=s;best=tr}}
-      const cxn=b[0]+b[2]/2,byn=b[1]+b[3];const lane=laneOf(cxn,byn);
+      const cxn=b[0]+b[2]/2,byn=b[1]+b[3];
+      if(byn>vp.y+0.08){const tt=(byn-vp.y)/(1-vp.y);samples.push(vp.x+(cxn-vp.x)/tt);if(samples.length>600)samples.shift()}const lane=laneOf(cxn,byn);
       if(best){const dt=now-best.t;if(dt>0){
           let r;if($('view').value==='dash'){ // distancia ~ 1/altura → dz/dt relativo
             const z0=1/best.b[3],z1=1/b[3];r=(z1-z0)/dt*1.5*3.6;} // escala aprox m (1.5 m alto) → km/h
@@ -122,14 +130,33 @@ async function loop(){
       else{const tr={id:nextId++,b,t:now,lane,cls:p.class,r:null,miss:0};tracks.push(tr);used.add(tr)}}
     tracks.forEach(t=>{if(!used.has(t))t.miss++});tracks=tracks.filter(t=>t.miss<8);
     // estimación por carril
-    const ego=$('view').value==='dash'?(usingCam&&gpsV!=null?gpsV:+$('ego').value):0;
+    const ego=$('view').value==='dash'?(usingCam?(gpsV??0):+$('ego').value):0;
     const n=bottom.length-1,cnt=Array(n).fill(0);
     for(let l=0;l<n;l++){const rs=tracks.filter(t=>t.lane===l&&t.miss===0&&t.r!=null&&Math.abs(t.r)<120).map(t=>t.r);cnt[l]=tracks.filter(t=>t.lane===l&&t.miss===0).length;
       if(rs.length){const m=Math.max(0,ego+rs.reduce((a,b)=>a+b,0)/rs.length);est[l]=est[l]==null?m:est[l]*0.9+m*0.1}}
+    if(autoLanes&&now-lastFit>3&&samples.length>=40){lastFit=now;fitLanes()}
     draw(preds,W,H);renderLanes(cnt);
   }else if(!paused)draw([],1,1);
   requestAnimationFrame(loop);
 }
+// detecta carriles: los coches circulan por el centro de cada carril -> picos en el histograma
+function fitLanes(){
+  const NB=60,lo=-0.3,hi=1.3,h=Array(NB).fill(0);
+  for(const x of samples){const i=Math.floor((x-lo)/(hi-lo)*NB);if(i>=0&&i<NB)h[i]++}
+  const sm=h.map((_,i)=>(h[i-2]||0)*0.5+(h[i-1]||0)+h[i]*1.5+(h[i+1]||0)+(h[i+2]||0)*0.5);
+  const mx=Math.max(...sm);let pk=[];
+  for(let i=1;i<NB-1;i++)if(sm[i]>=sm[i-1]&&sm[i]>sm[i+1]&&sm[i]>mx*0.2)pk.push(i);
+  // une picos demasiado cercanos
+  const minSep=3;pk=pk.filter((p,j)=>j===0||p-pk[j-1]>=minSep);
+  if(pk.length<2||pk.length>6)return;
+  const c=pk.map(i=>lo+(i+0.5)/NB*(hi-lo));
+  const nb=[c[0]-(c[1]-c[0])/2];for(let j=0;j<c.length-1;j++)nb.push((c[j]+c[j+1])/2);nb.push(c[c.length-1]+(c[c.length-1]-c[c.length-2])/2);
+  if(nb.length!==bottom.length){est=Array(nb.length-1).fill(null);tracks.forEach(t=>t.lane=-1)}
+  bottom=bottom.length===nb.length?bottom.map((b,i)=>b*0.6+nb[i]*0.4):nb;
+}
+function say(txt){if(!$('voice').checked||!('speechSynthesis' in window))return;const now=Date.now();
+  if(txt===lastSpoken&&now-lastSpeak<30000)return;if(now-lastSpeak<8000)return;lastSpoken=txt;lastSpeak=now;
+  const u=new SpeechSynthesisUtterance(txt);u.lang='es-MX';speechSynthesis.cancel();speechSynthesis.speak(u)}
 function draw(){
   const W=ov.width,H=ov.height;ctx.clearRect(0,0,W,H);const d=devicePixelRatio;
   // carriles
@@ -148,7 +175,10 @@ function renderLanes(cnt){
   const fixed=$('view').value==='fixed';
   $('lanes').innerHTML=est.map((s,i)=>`<div class="lane ${i===best?'best':''}"><div class="n" style="color:${colors[i]}">Carril ${i+1}</div><div class="v">${s==null?'–':s.toFixed(0)}</div><div class="f">${fixed?'flujo rel.':'km/h aprox'} · ${cnt[i]||0} coches</div></div>`).join('');
   if(best>=0){const val=est.filter(x=>x!=null);const avg=val.reduce((a,b)=>a+b,0)/val.length;
-    $('rec').innerHTML='Avanza más rápido: <span>Carril '+(best+1)+'</span>'+(avg>0?' · '+Math.round((bv/avg-1)*100)+'% sobre el promedio':'')}
+    const gain=avg>0?Math.round((bv/avg-1)*100):0;
+    $('rec').innerHTML='Avanza más rápido: <span>Carril '+(best+1)+'</span> de '+n+(avg>0?' · '+gain+'% sobre el promedio':'');
+    if(gain>=15)say('El carril '+(best+1)+' avanza más rápido')}
+  else if(autoLanes)$('rec').textContent='Detectando carriles… ('+samples.length+' muestras)';
 }
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>

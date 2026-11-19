@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Carril Rápido · Blvd. de la Madrid (prototipo)</title>
+<title>Carril Rápido · Simulación Blvd. de la Madrid</title>
 <style>
 :root{--bg:#0f1115;--card:#181b22;--tx:#e8eaf0;--mut:#8a90a0;--g:#2fbf71;--y:#f2c94c;--r:#eb5757;--acc:#5b8cff}
 *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
@@ -15,7 +15,8 @@ canvas{width:100%;display:block;border-radius:10px;background:#22252d}
 .tab{flex:1;background:#20242c;color:var(--tx);border:0;border-radius:10px;padding:10px;font-weight:600;font-size:14px}
 .tab.on{background:var(--acc)}
 .rec{font-size:17px;font-weight:600}.rec span{color:var(--g)}
-.lanes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.lanes{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:5px}
+@media(max-width:520px){.lane{padding:6px 2px!important}.lane .v{font-size:18px!important}.lane .n,.lane .f,.lane .u{font-size:10px!important}}
 .lane{background:#20242c;border-radius:10px;padding:8px;text-align:center;border:2px solid transparent}
 .lane.best{border-color:var(--g)}.lane.me{box-shadow:inset 0 0 0 2px #fff4}
 .lane .n{font-size:12px;color:var(--mut)}.lane .v{font-size:22px;font-weight:700}.lane .u{font-size:11px;color:var(--mut)}
@@ -39,7 +40,7 @@ button.sec{background:#2a2f3a}
 <body>
 <div class="wrap">
 <h1>🚗 Carril Rápido</h1>
-<div class="sub">Blvd. de la Madrid · Autopista a Cadereyta → Centro · <b>datos simulados</b></div>
+<div class="sub">Blvd. de la Madrid · Autopista a Cadereyta → Centro · <b>datos simulados</b> · <a href="/" style="color:#5b8cff">detección real</a></div>
 
 <div class="tabs">
 <button class="tab on" id="tDash">📱 Modo tablero</button>
@@ -68,12 +69,13 @@ button.sec{background:#2a2f3a}
 
 <div class="card">
 <div class="ctrl">
+<label>Carriles <select id="nlanes"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select></label>
 <label>Hora <select id="hora">
 <option value="0.35">6:00 am</option><option value="0.75">7:00 am</option>
 <option value="1" selected>7:30 am (pico)</option><option value="0.85">8:30 am</option><option value="0.3">11:00 am</option>
 </select></label>
-<label>Incorporación C1 <input type="range" id="merge" min="0" max="1" step="0.05" value="0.6"></label>
-<label>Camiones C4 <input type="range" id="bus" min="0" max="1" step="0.05" value="0.7"></label>
+<label>Incorporación (carril 1) <input type="range" id="merge" min="0" max="1" step="0.05" value="0.6"></label>
+<label>Camiones (carril derecho) <input type="range" id="bus" min="0" max="1" step="0.05" value="0.7"></label>
 <label>Velocidad sim. <input type="range" id="spd" min="1" max="6" step="1" value="2"></label>
 <button id="reset">Reiniciar</button>
 </div>
@@ -92,10 +94,10 @@ Escenario: el carril 1 (izquierdo) recibe incorporaciones de la autopista y el c
 </div>
 
 <script>
-const LANES=4,L=2400,LW=3.5,DET=800;
-const colors=['#5b8cff','#f2994a','#bb6bd9','#56ccf2'];
+let LANES=4;const L=2400,LW=3.5,DET=800;
+const colors=['#5b8cff','#f2994a','#bb6bd9','#56ccf2','#2fbf71','#eb5757'];
 const $=s=>document.getElementById(s);
-let cars=[],t=0,id=0,obs=[],hist=[[],[],[],[]],lastH=0,ego=null,mode='dash',est=[null,null,null,null],tracks={},banner=0;
+let cars=[],t=0,id=0,obs=[],hist=[],lastH=0,ego=null,mode='dash',est=[],tracks={},banner=0;
 function params(){return{dem:+$('hora').value,merge:+$('merge').value,bus:+$('bus').value}}
 
 // ---------- simulación (IDM + cambios de carril) ----------
@@ -104,21 +106,21 @@ function leader(c,lane){let b=null,d=1e9;for(const o of cars){if(o===c||o.lane!=
 function follower(c,lane){let b=null,d=1e9;for(const o of cars){if(o===c||o.lane!==lane)continue;const g=c.x-o.x;if(g>=0&&g<d){d=g;b=o}}return b}
 function acc(c,ld,v0){const v=c.v;if(!ld)return A*(1-Math.pow(v/v0,4));const s=Math.max(0.1,ld.x-c.x-LEN);const ss=S0+v*T+v*(v-ld.v)/(2*Math.sqrt(A*B));return A*(1-Math.pow(v/v0,4)-(ss/s)**2)}
 function newCar(x,lane,v,o={}){return Object.assign({id:id++,x,v,lane,ly:lane,v0:V0*(0.85+Math.random()*0.25),bus:false,stop:0,lc:0,stops:[]},o)}
-function reset(){cars=[];obs=[];hist=[[],[],[],[]];t=0;tracks={};est=[null,null,null,null];
+function reset(){LANES=+$('nlanes').value;document.documentElement.style.setProperty('--n',LANES);cars=[];obs=[];hist=Array.from({length:LANES},()=>[]);t=0;tracks={};est=Array(LANES).fill(null);
   // pre-poblar
   const p=params();for(let l=0;l<LANES;l++)for(let x=20;x<L;x+=25+Math.random()*30/p.dem)cars.push(newCar(x,l,5));
-  ego=newCar(150,1,5,{ego:true,v0:V0});cars=cars.filter(c=>!(c.lane===1&&Math.abs(c.x-150)<12));cars.push(ego);}
+  const el=Math.min(1,LANES-1);ego=newCar(150,el,5,{ego:true,v0:V0});cars=cars.filter(c=>!(c.lane===el&&Math.abs(c.x-150)<12));cars.push(ego);}
 const stopsAt=[350,700,1000,1400,1800,2200];
 function step(dt){
   const p=params();t+=dt;
   const rate=0.55*p.dem;
   for(let l=0;l<LANES;l++)if(Math.random()<rate*dt&&!cars.some(c=>c.lane===l&&c.x<15))cars.push(newCar(0,l,8+Math.random()*4));
   for(const mx of [300,1300])if(Math.random()<p.merge*0.5*p.dem*dt&&!cars.some(c=>c.lane===0&&Math.abs(c.x-mx)<7))cars.push(newCar(mx,0,3,{v0:V0*0.9}));
-  if(Math.random()<p.bus*0.4*dt&&!cars.some(c=>c.lane===3&&c.x<20))cars.push(newCar(0,3,8,{v0:14,bus:true,lc:1e9,stops:stopsAt.slice()}));
+  if(Math.random()<p.bus*0.4*dt&&!cars.some(c=>c.lane===LANES-1&&c.x<20))cars.push(newCar(0,3,8,{v0:14,bus:true,lc:1e9,stops:stopsAt.slice()}));
   for(const c of cars){let a;
     if(c.bus&&c.stops.length){const s=c.stops[0];if(c.stop>0){c.stop-=dt;a=-5;if(c.stop<=0)c.stops.shift()}
       else if(s-c.x<25&&s-c.x>0){a=-c.v*c.v/(2*Math.max(1,s-c.x))-0.5;if(c.v<0.3)c.stop=12+Math.random()*10*p.bus}else if(c.x>s)c.stops.shift()}
-    if(a===undefined){a=acc(c,leader(c,c.lane),c.v0);if(c.lane===3&&!c.bus&&!c.ego&&c.x>200&&Math.random()<p.bus*0.2*dt)a=Math.min(a,-3)}
+    if(a===undefined){a=acc(c,leader(c,c.lane),c.v0);if(c.lane===LANES-1&&!c.bus&&!c.ego&&c.x>200&&Math.random()<p.bus*0.2*dt)a=Math.min(a,-3)}
     c.a=a}
   for(const c of cars){const px=c.x;c.v=Math.max(0,c.v+c.a*dt);c.x+=c.v*dt;c.ly+=(c.lane-c.ly)*Math.min(1,dt*1.5);
     if(px<DET&&c.x>=DET&&!c.ego)obs.push({t,lane:c.lane,v:c.v})}
@@ -134,7 +136,7 @@ function step(dt){
 function egoChange(d){const nl=ego.lane+d;if(nl<0||nl>=LANES)return false;const nld=leader(ego,nl),nf=follower(ego,nl);
   if((nld&&nld.x-ego.x<LEN+2)||(nf&&ego.x-nf.x<LEN+2))return false;ego.lane=nl;ego.lc=6;return true}
 $('left').onclick=()=>egoChange(-1);$('right').onclick=()=>egoChange(1);
-$('reset').onclick=reset;
+$('reset').onclick=reset;$('nlanes').onchange=reset;
 
 // ---------- "visión" del modo tablero: detecciones con ruido + tracking ----------
 const F=420,CAMH=1.3; // focal px, altura cámara m
@@ -168,22 +170,22 @@ function drawDash(){
   // cerro de la Silla de fondo (silueta genérica)
   dx.fillStyle='#6b7a8a';dx.beginPath();dx.moveTo(0,hz);for(let i=0;i<=20;i++){const xx=i/20*W;dx.lineTo(xx,hz-18-Math.abs(Math.sin(i*0.9))*22-(i>12&&i<16?22:0))}dx.lineTo(W,hz);dx.fill();
   dx.fillStyle='#55605a';dx.fillRect(0,hz,W,H-hz);
-  const egoX=(ego.ly-1.5)*LW; // offset lateral del ego respecto al centro del bulevar
-  const lx=k=>(k-2)*LW-egoX; // línea k (0..4)
+  const egoX=(ego.ly-(LANES-1)/2)*LW; // offset lateral del ego respecto al centro del bulevar
+  const lx=k=>(k-LANES/2)*LW-egoX; // línea k (0..4)
   // asfalto
-  const n0=proj(2,lx(0)-1,W,H),n1=proj(2,lx(4)+1,W,H),f0=proj(200,lx(0)-1,W,H),f1=proj(200,lx(4)+1,W,H);
+  const n0=proj(2,lx(0)-1,W,H),n1=proj(2,lx(LANES)+1,W,H),f0=proj(200,lx(0)-1,W,H),f1=proj(200,lx(LANES)+1,W,H);
   dx.fillStyle='#3b3e45';dx.beginPath();dx.moveTo(n0.x,n0.y);dx.lineTo(f0.x,f0.y);dx.lineTo(f1.x,f1.y);dx.lineTo(n1.x,n1.y);dx.fill();
   // líneas
   const off=(ego.x%12);
-  for(let k=0;k<=4;k++){
-    if(k===0||k===4){const a=proj(2,lx(k),W,H),b=proj(200,lx(k),W,H);dx.strokeStyle=k===0?'#e2c044':'#fff';dx.lineWidth=2;dx.beginPath();dx.moveTo(a.x,a.y);dx.lineTo(b.x,b.y);dx.stroke();continue}
+  for(let k=0;k<=LANES;k++){
+    if(k===0||k===LANES){const a=proj(2,lx(k),W,H),b=proj(200,lx(k),W,H);dx.strokeStyle=k===0?'#e2c044':'#fff';dx.lineWidth=2;dx.beginPath();dx.moveTo(a.x,a.y);dx.lineTo(b.x,b.y);dx.stroke();continue}
     dx.fillStyle='#fff';for(let z=12-off;z<200;z+=12){if(z<2)continue;const a=proj(z,lx(k)-0.08,W,H),b=proj(z,lx(k)+0.08,W,H),c=proj(z+5,lx(k)+0.08,W,H),d=proj(z+5,lx(k)-0.08,W,H);
       dx.beginPath();dx.moveTo(a.x,a.y);dx.lineTo(b.x,b.y);dx.lineTo(c.x,c.y);dx.lineTo(d.x,d.y);dx.fill()}}
   // postes
-  for(let z=30-(ego.x%30);z<200;z+=30){if(z<3)continue;const p=proj(z,lx(4)+2.5,W,H),q=proj(z,lx(0)-2.5,W,H);dx.fillStyle='#888';dx.fillRect(p.x,p.y-p.s*6,Math.max(1,p.s*0.15),p.s*6);dx.fillRect(q.x,q.y-q.s*6,Math.max(1,q.s*0.15),q.s*6)}
+  for(let z=30-(ego.x%30);z<200;z+=30){if(z<3)continue;const p=proj(z,lx(LANES)+2.5,W,H),q=proj(z,lx(0)-2.5,W,H);dx.fillStyle='#888';dx.fillRect(p.x,p.y-p.s*6,Math.max(1,p.s*0.15),p.s*6);dx.fillRect(q.x,q.y-q.s*6,Math.max(1,q.s*0.15),q.s*6)}
   // coches (de lejos a cerca)
   const vis=cars.filter(c=>!c.ego&&c.x-ego.x-LEN>2&&c.x-ego.x<200).sort((a,b)=>b.x-a.x);
-  for(const c of vis){const z=c.x-ego.x-LEN;const xm=(c.ly-1.5)*LW-egoX;const w=c.bus?2.5:1.8,h=c.bus?3:1.45;
+  for(const c of vis){const z=c.x-ego.x-LEN;const xm=(c.ly-(LANES-1)/2)*LW-egoX;const w=c.bus?2.5:1.8,h=c.bus?3:1.45;
     const p=proj(z,xm,W,H);const pw=w*p.s,ph=h*p.s;
     dx.fillStyle=c.bus?'#d8d2c4':['#9aa3ad','#2b2f36','#b23a3a','#e6e6e6','#35577a'][c.id%5];
     dx.fillRect(p.x-pw/2,p.y-ph,pw,ph);
@@ -202,10 +204,10 @@ function drawDash(){
 }
 const mc=$('mini'),mx=mc.getContext('2d');
 function drawMini(){const W=90,H=150;mc.width=W*devicePixelRatio;mc.height=H*devicePixelRatio;mx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
-  mx.clearRect(0,0,W,H);const lw=16,x0=(W-lw*4)/2,sc=H/160;
-  mx.fillStyle='#333';mx.fillRect(x0,0,lw*4,H);
+  mx.clearRect(0,0,W,H);const lw=Math.min(16,80/LANES),x0=(W-lw*LANES)/2,sc=H/160;
+  mx.fillStyle='#333';mx.fillRect(x0,0,lw*LANES,H);
   for(const c of cars){const dz=c.x-ego.x;if(dz<-40||dz>120)continue;const y=H-(dz+40)*sc;
-    mx.fillStyle=c.ego?'#fff':colors[c.lane];mx.fillRect(x0+c.ly*lw+4,y-(c.bus?6:3),lw-8,c.bus?8:5)}
+    mx.fillStyle=c.ego?'#fff':colors[c.lane];mx.fillRect(x0+c.ly*lw+2,y-(c.bus?6:3),lw-4,c.bus?8:5)}
   mx.fillStyle='#fffa';mx.font='9px system-ui';mx.fillText('mapa',4,10)}
 
 // ---------- dibujo cámara fija ----------
@@ -258,7 +260,7 @@ function drawHist(){const W=hc.clientWidth,H=130;hc.width=W*devicePixelRatio;hc.
     h.forEach((v,i)=>{const px=26+(i/119)*(W-30),py=H-15-(Math.min(v,max)/max)*(H-25);i?hx.lineTo(px,py):hx.moveTo(px,py)});hx.stroke()}hx.lineWidth=1}
 
 function setMode(m){mode=m;$('tDash').classList.toggle('on',m==='dash');$('tFix').classList.toggle('on',m==='fix');
-  $('dashCard').classList.toggle('hidden',m!=='dash');$('fixCard').classList.toggle('hidden',m!=='fix');hist=[[],[],[],[]]}
+  $('dashCard').classList.toggle('hidden',m!=='dash');$('fixCard').classList.toggle('hidden',m!=='fix');hist=Array.from({length:LANES},()=>[])}
 $('tDash').onclick=()=>setMode('dash');$('tFix').onclick=()=>setMode('fix');
 
 reset();
