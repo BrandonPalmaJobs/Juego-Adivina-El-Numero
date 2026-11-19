@@ -42,6 +42,7 @@ a{color:var(--acc)}
 <button class="sec" id="pause">⏸︎</button>
 <button id="drive" style="background:#2fbf71;color:#04210f">🚗 Modo manejo</button>
 </div>
+<div id="gps" style="display:none;margin-top:8px;background:#3a2a10;color:#f2c94c;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600"></div>
 <div class="note" id="status" style="margin-top:8px">Cargando modelo de detección…</div>
 </div>
 
@@ -65,11 +66,11 @@ a{color:var(--acc)}
 <div class="card"><div class="lanes" id="lanes"></div><div class="note" id="sys" style="margin-top:6px"></div></div>
 <div id="driveUI" style="display:none;position:fixed;inset:0;background:#000;z-index:9;color:#fff;text-align:center;flex-direction:column;justify-content:center;align-items:center;padding:20px">
 <div id="dArrow" style="font-size:120px;line-height:1">⬆︎</div><div id="dText" style="font-size:30px;font-weight:800;margin-top:10px">Analizando…</div>
-<div id="dLanes" style="display:flex;gap:8px;margin-top:24px"></div><div id="dAlert" style="margin-top:20px;font-size:22px;color:#eb5757;font-weight:700"></div>
+<div id="dLanes" style="display:flex;gap:8px;margin-top:24px"></div><div id="dAlert" style="margin-top:20px;font-size:22px;color:#eb5757;font-weight:700"></div><div id="dGps" style="margin-top:10px;font-size:16px;color:#f2c94c"></div>
 <div style="position:absolute;bottom:20px;left:0;right:0;font-size:13px;color:#888">Avisos por voz activos · No mires la pantalla mientras manejas<br><button id="exitDrive" style="margin-top:10px;background:#333">Salir</button></div></div>
 
 <div class="card note">
-<b>Modo manejo:</b> deja la pantalla en negro con una flecha grande y te avisa todo por voz, también cuando un carril se queda detenido (choque, obra, pesero parado). Úsalo con el celular en soporte; no lo manipules mientras manejas.<br><br><b>Manos libres:</b> con la cámara, tu velocidad sale del GPS, los carriles se detectan solos, la pantalla se queda encendida y los avisos son por voz. Pon el celular en el soporte, apuntando al frente.<br><br><b>Cómo mide:</b> un modelo COCO-SSD detecta coches, autobuses y camiones en cada cuadro, directo en tu teléfono: el video no se sube a ningún lado. A cada coche se le asigna un carril según dónde están sus llantas respecto a las líneas. Para la velocidad, compara su tamaño de un cuadro a otro: si se hace más chico, se está alejando. Esa velocidad relativa se suma a la tuya, que sale del GPS si usas la cámara o del control si usas un video.<br>
+<b>Puentes y cambios de carriles:</b> la app vuelve a calcular el horizonte y los carriles cada 2 segundos. Al subir o bajar un puente (por ejemplo, de 6 carriles a 2 o de 2 a 6) se ajusta sola en unos 4 segundos y te avisa por voz.<br><br><b>GPS:</b> solo necesitas la ubicación del teléfono encendida y dar permiso una vez; Google Maps no hace falta. Si no hay señal, la app te avisa.<br><br><b>Modo manejo:</b> deja la pantalla en negro con una flecha grande y te avisa todo por voz, también cuando un carril se queda detenido (choque, obra, pesero parado). Úsalo con el celular en soporte; no lo manipules mientras manejas.<br><br><b>Manos libres:</b> con la cámara, tu velocidad sale del GPS, los carriles se detectan solos, la pantalla se queda encendida y los avisos son por voz. Pon el celular en el soporte, apuntando al frente.<br><br><b>Cómo mide:</b> un modelo COCO-SSD detecta coches, autobuses y camiones en cada cuadro, directo en tu teléfono: el video no se sube a ningún lado. A cada coche se le asigna un carril según dónde están sus llantas respecto a las líneas. Para la velocidad, compara su tamaño de un cuadro a otro: si se hace más chico, se está alejando. Esa velocidad relativa se suma a la tuya, que sale del GPS si usas la cámara o del control si usas un video.<br>
 En vista de cámara fija, la velocidad es la del movimiento hacia arriba o hacia abajo en la imagen (relativa entre carriles).<br>
 Los números son aproximados: sirven para comparar los carriles entre sí, no como un velocímetro.
 </div>
@@ -104,7 +105,20 @@ function targetFps(){const f=$('fps').value;if(f!=='auto')return +f;if(lowBatt)r
 $('file').onchange=e=>{const f=e.target.files[0];if(!f)return;stopCam();v.srcObject=null;v.src=URL.createObjectURL(f);v.play();start();if($('view').value==='dash')$('egoL').style.display='flex'};
 $('cam').onclick=async()=>{try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});v.src='';v.srcObject=s;usingCam=true;await v.play();start();$('egoL').style.display='none';
   try{wake=await navigator.wakeLock.request('screen')}catch(e){}
-  if(navigator.geolocation)navigator.geolocation.watchPosition(p=>{if(p.coords.speed!=null)gpsV=p.coords.speed*3.6},()=>{}, {enableHighAccuracy:true})}catch(e){$('status').textContent='No se pudo abrir la cámara: '+e.message}};
+  startGPS()}catch(e){$('status').textContent='No se pudo abrir la cámara: '+e.message}};
+// GPS: avisa si está apagado, sin permiso o sin señal
+let gpsState='off',lastFix=0,gpsPrev=null;
+function startGPS(){if(!navigator.geolocation){gpsMsg('Este navegador no tiene GPS');return}
+  gpsState='waiting';gpsMsg('Esperando GPS…');
+  navigator.geolocation.watchPosition(p=>{lastFix=Date.now();gpsState='ok';
+      let sp=p.coords.speed;
+      if(sp==null&&gpsPrev){const dt=(p.timestamp-gpsPrev.t)/1000;if(dt>0){const R=6371000,toR=Math.PI/180,dLa=(p.coords.latitude-gpsPrev.la)*toR,dLo=(p.coords.longitude-gpsPrev.lo)*toR*Math.cos(p.coords.latitude*toR);sp=R*Math.hypot(dLa,dLo)/dt}}
+      gpsPrev={t:p.timestamp,la:p.coords.latitude,lo:p.coords.longitude};if(sp!=null)gpsV=sp*3.6;gpsMsg('')},
+    e=>{gpsState='error';gpsV=null;if(e.code===1){gpsMsg('Sin permiso de ubicación: actívalo en el navegador');lastSpeak=0;say('Activa el permiso de ubicación')}
+      else{gpsMsg('Activa la ubicación del teléfono');lastSpeak=0;say('Activa la ubicación del teléfono')}},
+    {enableHighAccuracy:true,maximumAge:1000,timeout:20000});
+  setInterval(()=>{if(gpsState==='ok'&&Date.now()-lastFix>8000){gpsState='waiting';gpsV=null;gpsMsg('Sin señal de GPS (túnel o bajo puente)')}},3000)}
+function gpsMsg(t){$('dGps').textContent=t?'📍 '+t:'';const e=$('gps');if(e){e.textContent=t?'📍 '+t:'';e.style.display=t?'block':'none'}}
 function stopCam(){if(v.srcObject){v.srcObject.getTracks().forEach(t=>t.stop());usingCam=false}}
 $('pause').onclick=()=>{paused=!paused;paused?v.pause():v.play();$('pause').textContent=paused?'▶︎':'⏸︎'};
 
@@ -136,7 +150,7 @@ async function loop(){
     procMs=procMs*0.8+(performance.now()-t0)*0.2;
     const now=performance.now()/1000;
     track(preds,W,H,now);
-    if(autoLanes){scanLines();if(now-lastFit>2){lastFit=now;fitLanes()}}
+    if(autoLanes){scanLines();if(now-lastFit>2){lastFit=now;fitVP();fitLanes()}}
     const ego=$('view').value==='dash'?(usingCam?(gpsV??0):+$('ego').value):0;
     const n=bottom.length-1,cnt=Array(n).fill(0);
     for(let l=0;l<n;l++){const tl=tracks.filter(t=>t.lane===l&&t.miss===0);cnt[l]=tl.length;
@@ -205,11 +219,20 @@ function scanLines(){
       if(x<160){const o=(y*160+x)*4,R=d[o],G=d[o+1],B=d[o+2],br=(R+G+B)/3;
         const white=br>mean+thW&&Math.max(R,G,B)-Math.min(R,G,B)<40, yellow=R>140&&G>110&&B<G-40&&br>mean+25;on=white||yellow}
       if(on&&run<0)run=x;
-      if(!on&&run>=0){const w=x-run;if(w<=6){const xb=toBottom((run+w/2)/160,y/90),k=bin(xb);if(k>=0&&k<NB)lineHist[k]+=1}run=-1}}
+      if(!on&&run>=0){const w=x-run;if(w<=6){const px=(run+w/2)/160,py=y/90;linePts.push(px,py,performance.now());const xb=toBottom(px,py),k=bin(xb);if(k>=0&&k<NB)lineHist[k]+=1}run=-1}}
   }
   lowLight=rows>0&&rowMean/rows<60;
 }
-let lowLight=false;
+let lowLight=false,linePts=[];
+// busca el punto de fuga que hace que las líneas pintadas se alineen mejor (histograma más "picudo").
+// Se mueve al subir o bajar un puente o en pendientes, donde el horizonte cambia de altura.
+function fitVP(){const now=performance.now();let k=0;while(k<linePts.length&&now-linePts[k+2]>3000)k+=3;if(k)linePts=linePts.slice(k);
+  const N=linePts.length/3;if(N<150)return;
+  let best=null,bs=-1;
+  for(let vy=Math.max(0.15,vp.y-0.12);vy<=Math.min(0.75,vp.y+0.12);vy+=0.02)for(let vx=Math.max(0.2,vp.x-0.15);vx<=Math.min(0.8,vp.x+0.15);vx+=0.025){
+    const h=new Float32Array(NB);for(let i=0;i<linePts.length;i+=3){const px=linePts[i],py=linePts[i+1];const tt=(py-vy)/(1-vy);if(tt<=0.05)continue;const b=Math.floor(((vx+(px-vx)/tt)-LO)/(HI-LO)*NB);if(b>=0&&b<NB)h[b]++}
+    let sc=0;for(let b=0;b<NB;b++)sc+=h[b]*h[b];if(sc>bs){bs=sc;best=[vx,vy]}}
+  if(best){vp.x=vp.x*0.4+best[0]*0.6;vp.y=vp.y*0.4+best[1]*0.6}}
 function peaks(h,thrFrac,minSep){const sm=h.map((_,i)=>(h[i-2]||0)*0.5+(h[i-1]||0)+h[i]*1.5+(h[i+1]||0)+(h[i+2]||0)*0.5);
   const mx=Math.max(...sm);if(mx<=0)return[];let pk=[];
   for(let i=1;i<NB-1;i++)if(sm[i]>=sm[i-1]&&sm[i]>sm[i+1]&&sm[i]>mx*thrFrac)pk.push(i);
@@ -218,12 +241,12 @@ function fitLanes(){
   let nb=null,src='';
   // a) por líneas: los picos son las divisiones entre carriles
   if(lineHist){const L=peaks(lineHist,0.25,4);
-    if(L.length>=3&&L.length<=7){const gaps=L.slice(1).map((x,i)=>x-L[i]);const mg=gaps.reduce((a,b)=>a+b,0)/gaps.length;
-      if(Math.max(...gaps)<mg*1.8&&Math.min(...gaps)>mg*0.5){nb=L;src='líneas'}}}
+    if(L.length>=2&&L.length<=7){const gaps=L.slice(1).map((x,i)=>x-L[i]);const mg=gaps.reduce((a,b)=>a+b,0)/gaps.length;
+      if(Math.max(...gaps)<mg*1.8&&Math.min(...gaps)>mg*0.5&&mg>0.12&&mg<0.9){nb=L;src='líneas'}}}
   // b) por coches: los picos son los centros de los carriles
   if(!nb&&samples.length>=25){const h=Array(NB).fill(0);for(const s of samples){const k=bin(s.x);if(k>=0&&k<NB)h[k]++}
     const c=peaks(h,0.18,4);
-    if(c.length>=2&&c.length<=6){nb=[c[0]-(c[1]-c[0])/2];for(let j=0;j<c.length-1;j++)nb.push((c[j]+c[j+1])/2);nb.push(c[c.length-1]+(c[c.length-1]-c[c.length-2])/2);src='coches'}}
+    if(c.length>=1&&c.length<=6&&(c.length>1||samples.length>60)){if(c.length===1)c.push(c[0]+0.3);nb=[c[0]-(c[1]-c[0])/2];for(let j=0;j<c.length-1;j++)nb.push((c[j]+c[j+1])/2);nb.push(c[c.length-1]+(c[c.length-1]-c[c.length-2])/2);src='coches'}}
   if(!nb)return;
   const n=nb.length-1,cur=bottom.length-1;
   if(n===cur){bottom=bottom.map((b,i)=>b*0.7+nb[i]*0.3);pendCount=0;$('lanesInfo').textContent=n+' carriles ('+src+')';return}
@@ -231,7 +254,7 @@ function fitLanes(){
   if(n===pendN)pendCount++;else{pendN=n;pendCount=1}
   if(pendCount>=2){bottom=nb;est=Array(n).fill(null);tracks.forEach(t=>t.lane=-1);pendCount=0;$('nl').value=String(n);
     $('lanesInfo').textContent=n+' carriles ('+src+')';
-    lastSpeak=0;say((n<cur?'Se reduce a ':'Ahora son ')+n+' carriles')}
+    lastSpeak=0;say((n<cur?'Se reduce a ':'Se amplía a ')+n+' carriles')}
 }
 function say(txt){if(!$('voice').checked||!('speechSynthesis' in window))return;const now=Date.now();
   if(txt===lastSpoken&&now-lastSpeak<30000)return;if(now-lastSpeak<8000)return;lastSpoken=txt;lastSpeak=now;
