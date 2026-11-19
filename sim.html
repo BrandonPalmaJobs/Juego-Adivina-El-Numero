@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carril Rápido · Blvd. de la Madrid (prototipo)</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--tx:#e8eaf0;--mut:#8a90a0;--g:#2fbf71;--y:#f2c94c;--r:#eb5757;--acc:#5b8cff}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
+.wrap{max-width:900px;margin:0 auto;padding:12px}
+h1{font-size:20px;margin:4px 0}.sub{color:var(--mut);font-size:13px;margin-bottom:10px}
+.card{background:var(--card);border-radius:14px;padding:12px;margin-bottom:10px}
+canvas{width:100%;display:block;border-radius:10px;background:#22252d}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tab{flex:1;background:#20242c;color:var(--tx);border:0;border-radius:10px;padding:10px;font-weight:600;font-size:14px}
+.tab.on{background:var(--acc)}
+.rec{font-size:17px;font-weight:600}.rec span{color:var(--g)}
+.lanes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.lane{background:#20242c;border-radius:10px;padding:8px;text-align:center;border:2px solid transparent}
+.lane.best{border-color:var(--g)}.lane.me{box-shadow:inset 0 0 0 2px #fff4}
+.lane .n{font-size:12px;color:var(--mut)}.lane .v{font-size:22px;font-weight:700}.lane .u{font-size:11px;color:var(--mut)}
+.lane .f{font-size:11px;margin-top:3px;color:var(--mut)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+.ctrl{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:13px}
+.ctrl label{display:flex;gap:6px;align-items:center}
+input[type=range],input[type=checkbox]{accent-color:var(--acc)}
+select{background:#20242c;color:var(--tx);border:1px solid #333;border-radius:8px;padding:4px}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:600}
+button.sec{background:#2a2f3a}
+.hist{height:130px}
+.note{font-size:12px;color:var(--mut);line-height:1.5}
+.hidden{display:none}
+.dashwrap{position:relative}
+#mini{position:absolute;right:8px;top:8px;width:90px;height:150px;border-radius:8px;background:#000a}
+.hud{position:absolute;left:8px;top:8px;background:#000a;border-radius:8px;padding:6px 8px;font-size:12px;line-height:1.4}
+.banner{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:#2fbf71;color:#04210f;font-weight:700;padding:6px 12px;border-radius:20px;font-size:14px;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>🚗 Carril Rápido</h1>
+<div class="sub">Blvd. de la Madrid · Autopista a Cadereyta → Centro · <b>datos simulados</b></div>
+
+<div class="tabs">
+<button class="tab on" id="tDash">📱 Modo tablero</button>
+<button class="tab" id="tFix">📷 Cámara fija</button>
+</div>
+
+<div class="card"><div class="rec" id="rec">Calculando…</div></div>
+
+<div class="card" id="dashCard">
+<div class="dashwrap">
+<canvas id="dash" height="300"></canvas>
+<div class="hud" id="hud"></div>
+<canvas id="mini"></canvas>
+<div class="banner hidden" id="banner"></div>
+</div>
+<div class="ctrl" style="margin-top:8px">
+<button class="sec" id="left">◀ Cambiar izq.</button>
+<button class="sec" id="right">Cambiar der. ▶</button>
+<label><input type="checkbox" id="auto"> Seguir recomendación automáticamente</label>
+</div>
+</div>
+
+<div class="card hidden" id="fixCard"><canvas id="road" height="220"></canvas></div>
+
+<div class="card"><div class="lanes" id="lanes"></div></div>
+
+<div class="card">
+<div class="ctrl">
+<label>Hora <select id="hora">
+<option value="0.35">6:00 am</option><option value="0.75">7:00 am</option>
+<option value="1" selected>7:30 am (pico)</option><option value="0.85">8:30 am</option><option value="0.3">11:00 am</option>
+</select></label>
+<label>Incorporación C1 <input type="range" id="merge" min="0" max="1" step="0.05" value="0.6"></label>
+<label>Camiones C4 <input type="range" id="bus" min="0" max="1" step="0.05" value="0.7"></label>
+<label>Velocidad sim. <input type="range" id="spd" min="1" max="6" step="1" value="2"></label>
+<button id="reset">Reiniciar</button>
+</div>
+</div>
+
+<div class="card">
+<div class="note" style="margin-bottom:6px">Velocidad estimada por carril (km/h)</div>
+<canvas id="hist" class="hist"></canvas>
+</div>
+
+<div class="card note">
+<b>Modo tablero:</b> esto simula lo que vería la cámara del celular en el soporte del carro. Cada recuadro es una detección, como la que haría YOLO o TensorFlow.js sobre el video real. La app estima la distancia de cada coche con su tamaño en pantalla y saca su velocidad comparando cuadro contra cuadro. Con eso calcula qué tan rápido avanza cada carril, siempre desde tu punto de vista: solo ve hacia adelante y con algo de error, igual que pasaría en la realidad.<br><br>
+<b>Cámara fija:</b> un detector virtual sobre una cámara pública ve todos los carriles desde arriba.<br><br>
+Escenario: el carril 1 (izquierdo) recibe incorporaciones de la autopista y el carril 4 (derecho) tiene paradas de camión y salidas.
+</div>
+</div>
+
+<script>
+const LANES=4,L=2400,LW=3.5,DET=800;
+const colors=['#5b8cff','#f2994a','#bb6bd9','#56ccf2'];
+const $=s=>document.getElementById(s);
+let cars=[],t=0,id=0,obs=[],hist=[[],[],[],[]],lastH=0,ego=null,mode='dash',est=[null,null,null,null],tracks={},banner=0;
+function params(){return{dem:+$('hora').value,merge:+$('merge').value,bus:+$('bus').value}}
+
+// ---------- simulación (IDM + cambios de carril) ----------
+const V0=22,T=1.4,A=1.2,B=2,S0=2.5,LEN=4.5;
+function leader(c,lane){let b=null,d=1e9;for(const o of cars){if(o===c||o.lane!==lane)continue;const g=o.x-c.x;if(g>0&&g<d){d=g;b=o}}return b}
+function follower(c,lane){let b=null,d=1e9;for(const o of cars){if(o===c||o.lane!==lane)continue;const g=c.x-o.x;if(g>=0&&g<d){d=g;b=o}}return b}
+function acc(c,ld,v0){const v=c.v;if(!ld)return A*(1-Math.pow(v/v0,4));const s=Math.max(0.1,ld.x-c.x-LEN);const ss=S0+v*T+v*(v-ld.v)/(2*Math.sqrt(A*B));return A*(1-Math.pow(v/v0,4)-(ss/s)**2)}
+function newCar(x,lane,v,o={}){return Object.assign({id:id++,x,v,lane,ly:lane,v0:V0*(0.85+Math.random()*0.25),bus:false,stop:0,lc:0,stops:[]},o)}
+function reset(){cars=[];obs=[];hist=[[],[],[],[]];t=0;tracks={};est=[null,null,null,null];
+  // pre-poblar
+  const p=params();for(let l=0;l<LANES;l++)for(let x=20;x<L;x+=25+Math.random()*30/p.dem)cars.push(newCar(x,l,5));
+  ego=newCar(150,1,5,{ego:true,v0:V0});cars=cars.filter(c=>!(c.lane===1&&Math.abs(c.x-150)<12));cars.push(ego);}
+const stopsAt=[350,700,1000,1400,1800,2200];
+function step(dt){
+  const p=params();t+=dt;
+  const rate=0.55*p.dem;
+  for(let l=0;l<LANES;l++)if(Math.random()<rate*dt&&!cars.some(c=>c.lane===l&&c.x<15))cars.push(newCar(0,l,8+Math.random()*4));
+  for(const mx of [300,1300])if(Math.random()<p.merge*0.5*p.dem*dt&&!cars.some(c=>c.lane===0&&Math.abs(c.x-mx)<7))cars.push(newCar(mx,0,3,{v0:V0*0.9}));
+  if(Math.random()<p.bus*0.4*dt&&!cars.some(c=>c.lane===3&&c.x<20))cars.push(newCar(0,3,8,{v0:14,bus:true,lc:1e9,stops:stopsAt.slice()}));
+  for(const c of cars){let a;
+    if(c.bus&&c.stops.length){const s=c.stops[0];if(c.stop>0){c.stop-=dt;a=-5;if(c.stop<=0)c.stops.shift()}
+      else if(s-c.x<25&&s-c.x>0){a=-c.v*c.v/(2*Math.max(1,s-c.x))-0.5;if(c.v<0.3)c.stop=12+Math.random()*10*p.bus}else if(c.x>s)c.stops.shift()}
+    if(a===undefined){a=acc(c,leader(c,c.lane),c.v0);if(c.lane===3&&!c.bus&&!c.ego&&c.x>200&&Math.random()<p.bus*0.2*dt)a=Math.min(a,-3)}
+    c.a=a}
+  for(const c of cars){const px=c.x;c.v=Math.max(0,c.v+c.a*dt);c.x+=c.v*dt;c.ly+=(c.lane-c.ly)*Math.min(1,dt*1.5);
+    if(px<DET&&c.x>=DET&&!c.ego)obs.push({t,lane:c.lane,v:c.v})}
+  for(const c of cars){c.lc-=dt;if(c.lc>0||c.bus||c.ego)continue;
+    for(const d of [-1,1]){const nl=c.lane+d;if(nl<0||nl>=LANES)continue;const nld=leader(c,nl),nf=follower(c,nl);
+      if(nld&&nld.x-c.x<LEN+3)continue;if(nf&&c.x-nf.x<LEN+3)continue;
+      const fSafe=nf?acc(nf,c,nf.v0)>-3:true;
+      if(fSafe&&acc(c,nld,c.v0)-c.a>0.6&&Math.random()<0.3){c.lane=nl;c.lc=4;break}}}
+  // ego: si llega al final, reaparece al inicio (bucle del tramo)
+  if(ego.x>L-150){const dx=ego.x-150;for(const c of cars)c.x-=dx;cars=cars.filter(c=>c.x>=0||c.ego)}
+  cars=cars.filter(c=>c.x<L);obs=obs.filter(o=>t-o.t<180);
+}
+function egoChange(d){const nl=ego.lane+d;if(nl<0||nl>=LANES)return false;const nld=leader(ego,nl),nf=follower(ego,nl);
+  if((nld&&nld.x-ego.x<LEN+2)||(nf&&ego.x-nf.x<LEN+2))return false;ego.lane=nl;ego.lc=6;return true}
+$('left').onclick=()=>egoChange(-1);$('right').onclick=()=>egoChange(1);
+$('reset').onclick=reset;
+
+// ---------- "visión" del modo tablero: detecciones con ruido + tracking ----------
+const F=420,CAMH=1.3; // focal px, altura cámara m
+function detect(dt){
+  const seen={};
+  for(const c of cars){if(c.ego)continue;const dz=c.x-ego.x-LEN;if(dz<4||dz>90)continue;
+    if(Math.random()<0.08)continue; // detecciones perdidas
+    // oclusión simple: si hay otro coche más cercano en mismo carril, a veces se tapa
+    // distancia estimada por tamaño aparente (ruido crece con la distancia)
+    const zEst=dz*(1+(Math.random()-0.5)*0.06*(1+dz/40));
+    seen[c.id]={c,zEst};}
+  const ts=t;
+  for(const k in seen){const s=seen[k];const tr=tracks[k];
+    if(tr){const vr=(s.zEst-tr.z)/(ts-tr.t);tr.vr=tr.vr==null?vr:tr.vr*0.8+vr*0.2;tr.z=s.zEst;tr.t=ts;tr.lane=s.c.lane;tr.miss=0}
+    else tracks[k]={z:s.zEst,t:ts,vr:null,lane:s.c.lane,miss:0}}
+  for(const k in tracks){if(!seen[k]){tracks[k].miss++;if(tracks[k].miss>20)delete tracks[k]}}
+  // velocidad por carril = vel propia (GPS) + vel relativa promedio
+  for(let l=0;l<LANES;l++){const vs=[];for(const k in tracks){const tr=tracks[k];if(tr.lane===l&&tr.vr!=null&&tr.miss===0)vs.push(ego.v+tr.vr)}
+    if(vs.length){const m=Math.max(0,vs.reduce((a,b)=>a+b,0)/vs.length)*3.6;est[l]=est[l]==null?m:est[l]*0.97+m*0.03}
+  }
+  est[ego.lane]=est[ego.lane]==null?ego.v*3.6:est[ego.lane]*0.9+ego.v*3.6*0.1*1; // tu carril también usa tu GPS
+}
+
+// ---------- dibujo modo tablero ----------
+const dc=$('dash'),dx=dc.getContext('2d');
+function proj(z,xm,W,H){const hz=H*0.42;return{x:W/2+F*(W/640)*xm/z,y:hz+F*(W/640)*CAMH/z,s:F*(W/640)/z}}
+function drawDash(){
+  const W=dc.clientWidth,H=300;dc.width=W*devicePixelRatio;dc.height=H*devicePixelRatio;dx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  const hz=H*0.42;
+  let g=dx.createLinearGradient(0,0,0,hz);g.addColorStop(0,'#3a6ea5');g.addColorStop(1,'#c9d6e3');dx.fillStyle=g;dx.fillRect(0,0,W,hz);
+  // cerro de la Silla de fondo (silueta genérica)
+  dx.fillStyle='#6b7a8a';dx.beginPath();dx.moveTo(0,hz);for(let i=0;i<=20;i++){const xx=i/20*W;dx.lineTo(xx,hz-18-Math.abs(Math.sin(i*0.9))*22-(i>12&&i<16?22:0))}dx.lineTo(W,hz);dx.fill();
+  dx.fillStyle='#55605a';dx.fillRect(0,hz,W,H-hz);
+  const egoX=(ego.ly-1.5)*LW; // offset lateral del ego respecto al centro del bulevar
+  const lx=k=>(k-2)*LW-egoX; // línea k (0..4)
+  // asfalto
+  const n0=proj(2,lx(0)-1,W,H),n1=proj(2,lx(4)+1,W,H),f0=proj(200,lx(0)-1,W,H),f1=proj(200,lx(4)+1,W,H);
+  dx.fillStyle='#3b3e45';dx.beginPath();dx.moveTo(n0.x,n0.y);dx.lineTo(f0.x,f0.y);dx.lineTo(f1.x,f1.y);dx.lineTo(n1.x,n1.y);dx.fill();
+  // líneas
+  const off=(ego.x%12);
+  for(let k=0;k<=4;k++){
+    if(k===0||k===4){const a=proj(2,lx(k),W,H),b=proj(200,lx(k),W,H);dx.strokeStyle=k===0?'#e2c044':'#fff';dx.lineWidth=2;dx.beginPath();dx.moveTo(a.x,a.y);dx.lineTo(b.x,b.y);dx.stroke();continue}
+    dx.fillStyle='#fff';for(let z=12-off;z<200;z+=12){if(z<2)continue;const a=proj(z,lx(k)-0.08,W,H),b=proj(z,lx(k)+0.08,W,H),c=proj(z+5,lx(k)+0.08,W,H),d=proj(z+5,lx(k)-0.08,W,H);
+      dx.beginPath();dx.moveTo(a.x,a.y);dx.lineTo(b.x,b.y);dx.lineTo(c.x,c.y);dx.lineTo(d.x,d.y);dx.fill()}}
+  // postes
+  for(let z=30-(ego.x%30);z<200;z+=30){if(z<3)continue;const p=proj(z,lx(4)+2.5,W,H),q=proj(z,lx(0)-2.5,W,H);dx.fillStyle='#888';dx.fillRect(p.x,p.y-p.s*6,Math.max(1,p.s*0.15),p.s*6);dx.fillRect(q.x,q.y-q.s*6,Math.max(1,q.s*0.15),q.s*6)}
+  // coches (de lejos a cerca)
+  const vis=cars.filter(c=>!c.ego&&c.x-ego.x-LEN>2&&c.x-ego.x<200).sort((a,b)=>b.x-a.x);
+  for(const c of vis){const z=c.x-ego.x-LEN;const xm=(c.ly-1.5)*LW-egoX;const w=c.bus?2.5:1.8,h=c.bus?3:1.45;
+    const p=proj(z,xm,W,H);const pw=w*p.s,ph=h*p.s;
+    dx.fillStyle=c.bus?'#d8d2c4':['#9aa3ad','#2b2f36','#b23a3a','#e6e6e6','#35577a'][c.id%5];
+    dx.fillRect(p.x-pw/2,p.y-ph,pw,ph);
+    dx.fillStyle='#111a';dx.fillRect(p.x-pw*0.4,p.y-ph*0.95,pw*0.8,ph*0.35);
+    dx.fillStyle='#e33';const sb=c.a<-0.5?1:0.35;dx.globalAlpha=sb;dx.fillRect(p.x-pw/2,p.y-ph*0.45,pw*0.15,ph*0.12);dx.fillRect(p.x+pw*0.35,p.y-ph*0.45,pw*0.15,ph*0.12);dx.globalAlpha=1;
+    // caja de detección
+    const tr=tracks[c.id];if(tr&&tr.miss===0&&z<90){const sp=Math.max(0,(ego.v+(tr.vr||0))*3.6);
+      dx.strokeStyle=colors[c.lane];dx.lineWidth=1.5;dx.strokeRect(p.x-pw/2-2,p.y-ph-2,pw+4,ph+4);
+      if(pw>18){dx.fillStyle=colors[c.lane];dx.font='10px system-ui';const lab=(c.bus?'bus ':'auto ')+(tr.vr==null?'':sp.toFixed(0)+'km/h');const tw=dx.measureText(lab).width;
+        dx.fillRect(p.x-pw/2-2,p.y-ph-15,tw+6,13);dx.fillStyle='#000';dx.fillText(lab,p.x-pw/2+1,p.y-ph-5)}}}
+  // cofre
+  dx.fillStyle='#15171c';dx.beginPath();dx.moveTo(0,H);dx.quadraticCurveTo(W/2,H-38,W,H);dx.fill();
+  // HUD
+  $('hud').innerHTML=`Tu velocidad (GPS): <b>${(ego.v*3.6).toFixed(0)} km/h</b><br>Carril actual: <b style="color:${colors[ego.lane]}">C${ego.lane+1}</b><br>Coches detectados: ${Object.values(tracks).filter(x=>x.miss===0).length}`;
+  drawMini();
+}
+const mc=$('mini'),mx=mc.getContext('2d');
+function drawMini(){const W=90,H=150;mc.width=W*devicePixelRatio;mc.height=H*devicePixelRatio;mx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  mx.clearRect(0,0,W,H);const lw=16,x0=(W-lw*4)/2,sc=H/160;
+  mx.fillStyle='#333';mx.fillRect(x0,0,lw*4,H);
+  for(const c of cars){const dz=c.x-ego.x;if(dz<-40||dz>120)continue;const y=H-(dz+40)*sc;
+    mx.fillStyle=c.ego?'#fff':colors[c.lane];mx.fillRect(x0+c.ly*lw+4,y-(c.bus?6:3),lw-8,c.bus?8:5)}
+  mx.fillStyle='#fffa';mx.font='9px system-ui';mx.fillText('mapa',4,10)}
+
+// ---------- dibujo cámara fija ----------
+const cv=$('road'),cx=cv.getContext('2d');
+function drawFix(){
+  const W=cv.clientWidth,H=220,VIEW=1200;cv.width=W*devicePixelRatio;cv.height=H*devicePixelRatio;cx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  cx.fillStyle='#2a2d35';cx.fillRect(0,0,W,H);const top=20,lh=(H-40)/LANES,sx=W/VIEW;
+  cx.strokeStyle='#fff8';cx.setLineDash([12,10]);for(let i=1;i<LANES;i++){cx.beginPath();cx.moveTo(0,top+i*lh);cx.lineTo(W,top+i*lh);cx.stroke()}
+  cx.setLineDash([]);cx.strokeStyle='#fff';cx.lineWidth=2;cx.beginPath();cx.moveTo(0,top);cx.lineTo(W,top);cx.moveTo(0,top+LANES*lh);cx.lineTo(W,top+LANES*lh);cx.stroke();cx.lineWidth=1;
+  cx.strokeStyle='#f2c94c';cx.setLineDash([4,4]);cx.beginPath();cx.moveTo(DET*sx,top-8);cx.lineTo(DET*sx,top+LANES*lh+8);cx.stroke();cx.setLineDash([]);
+  cx.fillStyle='#f2c94c';cx.font='11px system-ui';cx.fillText('detector',DET*sx+4,12);cx.fillStyle='#8a90a0';cx.fillText('↘ incorporación',300*sx-30,12);
+  for(const s of [350,700,1000]){cx.fillStyle='#eb575788';cx.fillRect(s*sx-4,top+LANES*lh,8,6)}
+  for(let i=0;i<LANES;i++){cx.fillStyle='#ffffff55';cx.fillText('C'+(i+1),4,top+i*lh+lh/2+4)}
+  for(const c of cars){if(c.x>VIEW)continue;const sp=c.v*3.6;const col=c.ego?'#fff':sp>35?'#2fbf71':sp>15?'#f2c94c':'#eb5757';
+    const w=Math.max(6,(c.bus?12:LEN)*sx),h=lh*(c.bus?0.6:0.5);cx.fillStyle=col;cx.fillRect(c.x*sx-w,top+c.ly*lh+(lh-h)/2,w,h)}
+  cx.fillStyle='#8a90a0';cx.fillText('→ Centro',W-60,H-6);
+}
+
+// ---------- estadísticas y UI ----------
+function fixStats(){const out=[];for(let l=0;l<LANES;l++){const o=obs.filter(x=>x.lane===l&&t-x.t<120);
+  out.push({v:o.length?o.reduce((s,x)=>s+x.v,0)/o.length*3.6:null,f:obs.filter(x=>x.lane===l&&t-x.t<60).length+' coches/min'})}return out}
+function dashStats(){return est.map((v,l)=>({v,f:l===ego.lane?'tu carril':Object.values(tracks).filter(x=>x.lane===l&&x.miss===0).length+' detectados'}))}
+let lastRec=-1,autoT=0;
+function ui(st){
+  let best=-1,bv=-1;st.forEach((s,i)=>{if(s.v!=null&&s.v>bv){bv=s.v;best=i}});
+  const ready=t>20;
+  if(mode==='dash'){
+    const cur=st[ego.lane].v||0;
+    // en modo tablero la recomendación es moverte a un carril vecino (o seguir)
+    let tgt=ego.lane,tv=cur;for(const d of [-1,1]){const l=ego.lane+d;if(l<0||l>=LANES||st[l].v==null)continue;if(st[l].v>tv*1.15+2){tv=st[l].v;tgt=l}}
+    if(!ready)$('rec').textContent='Analizando video… ('+Math.round(t)+' s)';
+    else if(tgt===ego.lane)$('rec').innerHTML='Quédate en <span>Carril '+(ego.lane+1)+'</span>'+(best!==ego.lane&&best>=0?' · el C'+(best+1)+' va mejor, pero está lejos':'');
+    else{const gain=Math.round((tv/Math.max(cur,1)-1)*100);$('rec').innerHTML='Cámbiate al <span>Carril '+(tgt+1)+'</span> '+(tgt<ego.lane?'◀':'▶')+' · +'+gain+'% más rápido';
+      $('banner').textContent=(tgt<ego.lane?'◀ ':'')+'Carril '+(tgt+1)+' avanza más'+(tgt>ego.lane?' ▶':'');$('banner').classList.remove('hidden');banner=t;
+      if($('auto').checked&&t-autoT>8){if(egoChange(tgt-ego.lane))autoT=t}}
+    if(t-banner>3)$('banner').classList.add('hidden');
+  }else{
+    if(!ready||best<0)$('rec').textContent='Midiendo tráfico… ('+Math.round(t)+' s)';
+    else{const val=st.filter(s=>s.v!=null);const avg=val.reduce((a,s)=>a+s.v,0)/val.length;
+      $('rec').innerHTML='Recomendado: <span>Carril '+(best+1)+'</span> · '+bv.toFixed(0)+' km/h ('+Math.round((bv/avg-1)*100)+'% vs promedio)'}}
+  $('lanes').innerHTML=st.map((s,i)=>{const v=s.v;const col=v==null?'#555':v>35?'var(--g)':v>15?'var(--y)':'var(--r)';
+    return `<div class="lane ${i===best&&ready?'best':''} ${mode==='dash'&&i===ego.lane?'me':''}"><div class="n"><span class="dot" style="background:${colors[i]}"></span>Carril ${i+1}${mode==='dash'&&i===ego.lane?' (tú)':''}</div>
+    <div class="v" style="color:${col}">${v==null?'–':v.toFixed(0)}</div><div class="u">km/h</div><div class="f">${s.f}</div></div>`}).join('');
+}
+const hc=$('hist'),hx=hc.getContext('2d');
+function drawHist(){const W=hc.clientWidth,H=130;hc.width=W*devicePixelRatio;hc.height=H*devicePixelRatio;hx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  hx.clearRect(0,0,W,H);const max=60;hx.strokeStyle='#333';hx.fillStyle='#8a90a0';hx.font='10px system-ui';
+  for(const y of [0,20,40,60]){const py=H-15-(y/max)*(H-25);hx.beginPath();hx.moveTo(26,py);hx.lineTo(W,py);hx.stroke();hx.fillText(y,2,py+3)}
+  for(let l=0;l<LANES;l++){const h=hist[l];if(h.length<2)continue;hx.strokeStyle=colors[l];hx.lineWidth=2;hx.beginPath();
+    h.forEach((v,i)=>{const px=26+(i/119)*(W-30),py=H-15-(Math.min(v,max)/max)*(H-25);i?hx.lineTo(px,py):hx.moveTo(px,py)});hx.stroke()}hx.lineWidth=1}
+
+function setMode(m){mode=m;$('tDash').classList.toggle('on',m==='dash');$('tFix').classList.toggle('on',m==='fix');
+  $('dashCard').classList.toggle('hidden',m!=='dash');$('fixCard').classList.toggle('hidden',m!=='fix');hist=[[],[],[],[]]}
+$('tDash').onclick=()=>setMode('dash');$('tFix').onclick=()=>setMode('fix');
+
+reset();
+let lastUi=0,lastDet=0;
+function loop(){
+  const n=+$('spd').value*3;for(let i=0;i<n;i++){step(0.1);if(t-lastDet>=0.2){detect(t-lastDet);lastDet=t}}
+  if(mode==='dash')drawDash();else drawFix();
+  if(performance.now()-lastUi>500){lastUi=performance.now();const st=mode==='dash'?dashStats():fixStats();ui(st);
+    if(t-lastH>4){lastH=t;st.forEach((s,i)=>{if(s.v!=null){hist[i].push(s.v);if(hist[i].length>120)hist[i].shift()}});drawHist()}}
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
