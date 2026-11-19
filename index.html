@@ -50,11 +50,13 @@ a{color:var(--acc)}
 <div class="stage"><video id="v" playsinline muted loop></video><canvas id="ov"></canvas></div>
 <div class="ctrl">
 <label>Carriles <select id="nl"><option value="auto" selected>Auto</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+<label><input type="checkbox" id="adapt" checked> Ajustar solo si cambian</label>
+<span id="lanesInfo" class="note"></span>
 <label><input type="checkbox" id="voice" checked> Avisos por voz</label>
 <label>Vista <select id="view"><option value="dash">Desde el carro</option><option value="fixed">Cámara fija / puente</option></select></label>
 <label id="egoL">Tu velocidad <input type="range" id="ego" min="0" max="80" value="20"> <b id="egoV">20</b> km/h</label>
 </div>
-<div class="note" style="margin-top:6px" id="hint">En <b>Auto</b> la app detecta cuántos carriles hay según por dónde pasan los coches (tarda unos segundos). Si quieres, puedes ajustar a mano arrastrando los puntos blancos; al hacerlo se fija el número de carriles.</div>
+<div class="note" style="margin-top:6px" id="hint">Con <b>Ajustar solo si cambian</b> la app revisa los carriles cada par de segundos con las líneas pintadas y con la posición de los coches. Si el camino pasa de 4 a 3 o de 4 a 5 carriles, cambia sola y te avisa por voz. El número que elijas es solo el punto de partida. Si arrastras los puntos blancos, se fija tu ajuste manual.</div>
 </div>
 
 <div class="card"><div class="lanes" id="lanes"></div></div>
@@ -77,8 +79,10 @@ let model=null,running=false,tracks=[],nextId=0,est=[],gpsV=null,usingCam=false,
 let vp={x:0.5,y:0.42},bottom=[];
 let autoLanes=true,samples=[],lastFit=0,lastSpoken='',lastSpeak=0,wake=null;
 function setN(n){bottom=[];for(let i=0;i<=n;i++)bottom.push(0.05+0.9*i/n);est=Array(n).fill(null);tracks=[];renderLanes([])}
-function initLanes(){autoLanes=$('nl').value==='auto';samples=[];setN(autoLanes?3:+$('nl').value)}
-$('nl').onchange=initLanes;initLanes();
+let lineHist=null,pendN=0,pendCount=0;const off=document.createElement('canvas'),octx=off.getContext('2d',{willReadFrequently:true});off.width=160;off.height=90;
+function initLanes(){autoLanes=$('adapt').checked;samples=[];lineHist=null;setN($('nl').value==='auto'?3:+$('nl').value)}
+$('adapt').onchange=()=>{autoLanes=$('adapt').checked;samples=[];lineHist=null};
+$('nl').onchange=()=>{setN($('nl').value==='auto'?3:+$('nl').value);samples=[];lineHist=null};initLanes();
 $('ego').oninput=()=>$('egoV').textContent=$('ego').value;
 $('view').onchange=()=>{$('egoL').style.display=($('view').value==='dash'&&!usingCam)?'flex':'none';est=est.map(()=>null)};
 
@@ -100,7 +104,7 @@ let drag=null;
 function pt(e){const r=ov.getBoundingClientRect();const p=e.touches?e.touches[0]:e;return{x:(p.clientX-r.left)/r.width,y:(p.clientY-r.top)/r.height}}
 ov.addEventListener('pointerdown',e=>{const p=pt(e);const W=ov.clientWidth,H=ov.clientHeight;
   if(Math.hypot((p.x-vp.x)*W,(p.y-vp.y)*H)<22){drag='vp';return}
-  if(autoLanes){autoLanes=false;$('nl').value=String(bottom.length-1)}
+  if(autoLanes){autoLanes=false;$('adapt').checked=false;$('nl').value=String(bottom.length-1)}
   bottom.forEach((b,i)=>{if(Math.hypot((p.x-b)*W,(p.y-0.97)*H)<22)drag=i})});
 ov.addEventListener('pointermove',e=>{if(drag===null)return;const p=pt(e);if(drag==='vp'){vp.x=Math.min(.95,Math.max(.05,p.x));vp.y=Math.min(.8,Math.max(.05,p.y))}else bottom[drag]=p.x});
 addEventListener('pointerup',()=>drag=null);
@@ -119,7 +123,7 @@ async function loop(){
     for(const p of preds){const b=[p.bbox[0]/W,p.bbox[1]/H,p.bbox[2]/W,p.bbox[3]/H];let best=null,bi=0.25;
       for(const tr of tracks){if(used.has(tr))continue;const s=iou(b,tr.b);if(s>bi){bi=s;best=tr}}
       const cxn=b[0]+b[2]/2,byn=b[1]+b[3];
-      if(byn>vp.y+0.08){const tt=(byn-vp.y)/(1-vp.y);samples.push(vp.x+(cxn-vp.x)/tt);if(samples.length>600)samples.shift()}const lane=laneOf(cxn,byn);
+      if(autoLanes&&byn>vp.y+0.08){const tt=(byn-vp.y)/(1-vp.y);samples.push({x:vp.x+(cxn-vp.x)/tt,t:now});while(samples.length&&now-samples[0].t>25)samples.shift()}const lane=laneOf(cxn,byn);
       if(best){const dt=now-best.t;if(dt>0){
           let r;if($('view').value==='dash'){ // distancia ~ 1/altura → dz/dt relativo
             const z0=1/best.b[3],z1=1/b[3];r=(z1-z0)/dt*1.5*3.6;} // escala aprox m (1.5 m alto) → km/h
@@ -133,25 +137,53 @@ async function loop(){
     const n=bottom.length-1,cnt=Array(n).fill(0);
     for(let l=0;l<n;l++){const rs=tracks.filter(t=>t.lane===l&&t.miss===0&&t.r!=null&&Math.abs(t.r)<120).map(t=>t.r);cnt[l]=tracks.filter(t=>t.lane===l&&t.miss===0).length;
       if(rs.length){const m=Math.max(0,ego+rs.reduce((a,b)=>a+b,0)/rs.length);est[l]=est[l]==null?m:est[l]*0.9+m*0.1}}
-    if(autoLanes&&now-lastFit>3&&samples.length>=40){lastFit=now;fitLanes()}
+    if(autoLanes){scanLines();if(now-lastFit>2){lastFit=now;fitLanes()}}
     draw(preds,W,H);renderLanes(cnt);
   }else if(!paused)draw([],1,1);
   requestAnimationFrame(loop);
 }
 // detecta carriles: los coches circulan por el centro de cada carril -> picos en el histograma
+// --- detección de carriles ---
+const NB=64,LO=-0.3,HI=1.3,bin=x=>Math.floor((x-LO)/(HI-LO)*NB),binX=i=>LO+(i+0.5)/NB*(HI-LO);
+function toBottom(x,y){const tt=(y-vp.y)/(1-vp.y);return vp.x+(x-vp.x)/tt}
+// 1) líneas pintadas: píxeles blancos/amarillos en la parte baja de la imagen, proyectados al borde inferior
+function scanLines(){
+  if(!lineHist)lineHist=Array(NB).fill(0);
+  octx.drawImage(v,0,0,160,90);const d=octx.getImageData(0,0,160,90).data;
+  for(let k=0;k<NB;k++)lineHist[k]*=0.97; // memoria de ~5 s
+  for(let y=Math.ceil(90*(vp.y+0.12));y<86;y+=2){
+    // brillo medio de la fila para adaptarse a día/noche
+    let sum=0;for(let x=0;x<160;x++){const o=(y*160+x)*4;sum+=d[o]+d[o+1]+d[o+2]}const mean=sum/480;
+    let run=-1;
+    for(let x=0;x<=160;x++){let on=false;
+      if(x<160){const o=(y*160+x)*4,R=d[o],G=d[o+1],B=d[o+2],br=(R+G+B)/3;
+        const white=br>mean+45&&Math.max(R,G,B)-Math.min(R,G,B)<40, yellow=R>140&&G>110&&B<G-40&&br>mean+25;on=white||yellow}
+      if(on&&run<0)run=x;
+      if(!on&&run>=0){const w=x-run;if(w<=6){const xb=toBottom((run+w/2)/160,y/90),k=bin(xb);if(k>=0&&k<NB)lineHist[k]+=1}run=-1}}
+  }
+}
+function peaks(h,thrFrac,minSep){const sm=h.map((_,i)=>(h[i-2]||0)*0.5+(h[i-1]||0)+h[i]*1.5+(h[i+1]||0)+(h[i+2]||0)*0.5);
+  const mx=Math.max(...sm);if(mx<=0)return[];let pk=[];
+  for(let i=1;i<NB-1;i++)if(sm[i]>=sm[i-1]&&sm[i]>sm[i+1]&&sm[i]>mx*thrFrac)pk.push(i);
+  const out=[];for(const p of pk){if(out.length&&p-out[out.length-1]<minSep){if(sm[p]>sm[out[out.length-1]])out[out.length-1]=p}else out.push(p)}return out.map(binX)}
 function fitLanes(){
-  const NB=60,lo=-0.3,hi=1.3,h=Array(NB).fill(0);
-  for(const x of samples){const i=Math.floor((x-lo)/(hi-lo)*NB);if(i>=0&&i<NB)h[i]++}
-  const sm=h.map((_,i)=>(h[i-2]||0)*0.5+(h[i-1]||0)+h[i]*1.5+(h[i+1]||0)+(h[i+2]||0)*0.5);
-  const mx=Math.max(...sm);let pk=[];
-  for(let i=1;i<NB-1;i++)if(sm[i]>=sm[i-1]&&sm[i]>sm[i+1]&&sm[i]>mx*0.2)pk.push(i);
-  // une picos demasiado cercanos
-  const minSep=3;pk=pk.filter((p,j)=>j===0||p-pk[j-1]>=minSep);
-  if(pk.length<2||pk.length>6)return;
-  const c=pk.map(i=>lo+(i+0.5)/NB*(hi-lo));
-  const nb=[c[0]-(c[1]-c[0])/2];for(let j=0;j<c.length-1;j++)nb.push((c[j]+c[j+1])/2);nb.push(c[c.length-1]+(c[c.length-1]-c[c.length-2])/2);
-  if(nb.length!==bottom.length){est=Array(nb.length-1).fill(null);tracks.forEach(t=>t.lane=-1)}
-  bottom=bottom.length===nb.length?bottom.map((b,i)=>b*0.6+nb[i]*0.4):nb;
+  let nb=null,src='';
+  // a) por líneas: los picos son las divisiones entre carriles
+  if(lineHist){const L=peaks(lineHist,0.25,4);
+    if(L.length>=3&&L.length<=7){const gaps=L.slice(1).map((x,i)=>x-L[i]);const mg=gaps.reduce((a,b)=>a+b,0)/gaps.length;
+      if(Math.max(...gaps)<mg*1.8&&Math.min(...gaps)>mg*0.5){nb=L;src='líneas'}}}
+  // b) por coches: los picos son los centros de los carriles
+  if(!nb&&samples.length>=25){const h=Array(NB).fill(0);for(const s of samples){const k=bin(s.x);if(k>=0&&k<NB)h[k]++}
+    const c=peaks(h,0.18,4);
+    if(c.length>=2&&c.length<=6){nb=[c[0]-(c[1]-c[0])/2];for(let j=0;j<c.length-1;j++)nb.push((c[j]+c[j+1])/2);nb.push(c[c.length-1]+(c[c.length-1]-c[c.length-2])/2);src='coches'}}
+  if(!nb)return;
+  const n=nb.length-1,cur=bottom.length-1;
+  if(n===cur){bottom=bottom.map((b,i)=>b*0.7+nb[i]*0.3);pendCount=0;$('lanesInfo').textContent=n+' carriles ('+src+')';return}
+  // histéresis: el cambio debe verse 2 veces seguidas (~4 s) para evitar saltos
+  if(n===pendN)pendCount++;else{pendN=n;pendCount=1}
+  if(pendCount>=2){bottom=nb;est=Array(n).fill(null);tracks.forEach(t=>t.lane=-1);pendCount=0;$('nl').value=String(n);
+    $('lanesInfo').textContent=n+' carriles ('+src+')';
+    lastSpeak=0;say((n<cur?'Se reduce a ':'Ahora son ')+n+' carriles')}
 }
 function say(txt){if(!$('voice').checked||!('speechSynthesis' in window))return;const now=Date.now();
   if(txt===lastSpoken&&now-lastSpeak<30000)return;if(now-lastSpeak<8000)return;lastSpoken=txt;lastSpeak=now;
@@ -177,7 +209,7 @@ function renderLanes(cnt){
     const gain=avg>0?Math.round((bv/avg-1)*100):0;
     $('rec').innerHTML='Avanza más rápido: <span>Carril '+(best+1)+'</span> de '+n+(avg>0?' · '+gain+'% sobre el promedio':'');
     if(gain>=15)say('El carril '+(best+1)+' avanza más rápido')}
-  else if(autoLanes)$('rec').textContent='Detectando carriles… ('+samples.length+' muestras)';
+  else if(autoLanes)$('rec').textContent='Detectando carriles…';
 }
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
