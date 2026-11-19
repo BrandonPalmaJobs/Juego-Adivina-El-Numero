@@ -89,7 +89,7 @@ button.sec{background:#2a2f3a}
 <div class="card note">
 <b>Modo tablero:</b> esto simula lo que vería la cámara del celular en el soporte del carro. Cada recuadro es una detección, como la que haría YOLO o TensorFlow.js sobre el video real. La app estima la distancia de cada coche con su tamaño en pantalla y saca su velocidad comparando cuadro contra cuadro. Con eso calcula qué tan rápido avanza cada carril, siempre desde tu punto de vista: solo ve hacia adelante y con algo de error, igual que pasaría en la realidad.<br><br>
 <b>Cámara fija:</b> un detector virtual sobre una cámara pública ve todos los carriles desde arriba.<br><br>
-Escenario: el carril 1 (izquierdo) recibe incorporaciones de la autopista y el carril 4 (derecho) tiene paradas de camión y salidas.
+Escenario: el carril 1 (izquierdo) recibe incorporaciones de la autopista y el carril derecho tiene paradas de camión y salidas.
 </div>
 </div>
 
@@ -116,7 +116,7 @@ function step(dt){
   const rate=0.55*p.dem;
   for(let l=0;l<LANES;l++)if(Math.random()<rate*dt&&!cars.some(c=>c.lane===l&&c.x<15))cars.push(newCar(0,l,8+Math.random()*4));
   for(const mx of [300,1300])if(Math.random()<p.merge*0.5*p.dem*dt&&!cars.some(c=>c.lane===0&&Math.abs(c.x-mx)<7))cars.push(newCar(mx,0,3,{v0:V0*0.9}));
-  if(Math.random()<p.bus*0.4*dt&&!cars.some(c=>c.lane===LANES-1&&c.x<20))cars.push(newCar(0,3,8,{v0:14,bus:true,lc:1e9,stops:stopsAt.slice()}));
+  if(Math.random()<p.bus*0.4*dt&&!cars.some(c=>c.lane===LANES-1&&c.x<20))cars.push(newCar(0,LANES-1,8,{v0:14,bus:true,lc:1e9,stops:stopsAt.slice()}));
   for(const c of cars){let a;
     if(c.bus&&c.stops.length){const s=c.stops[0];if(c.stop>0){c.stop-=dt;a=-5;if(c.stop<=0)c.stops.shift()}
       else if(s-c.x<25&&s-c.x>0){a=-c.v*c.v/(2*Math.max(1,s-c.x))-0.5;if(c.v<0.3)c.stop=12+Math.random()*10*p.bus}else if(c.x>s)c.stops.shift()}
