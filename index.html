@@ -71,14 +71,13 @@ Los números son aproximados: sirven para comparar los carriles entre sí, no co
 <script>
 const $=s=>document.getElementById(s);
 const v=$('v'),ov=$('ov'),ctx=ov.getContext('2d');
-const colors=['#5b8cff','#f2994a','#bb6bd9','#56ccf2','#2fbf71'];
+const colors=['#5b8cff','#f2994a','#bb6bd9','#56ccf2','#2fbf71','#eb5757'];
 let model=null,running=false,tracks=[],nextId=0,est=[],gpsV=null,usingCam=false,paused=false;
 // geometría de carriles en coordenadas normalizadas (0..1)
 let vp={x:0.5,y:0.42},bottom=[];
 let autoLanes=true,samples=[],lastFit=0,lastSpoken='',lastSpeak=0,wake=null;
 function setN(n){bottom=[];for(let i=0;i<=n;i++)bottom.push(0.05+0.9*i/n);est=Array(n).fill(null);tracks=[];renderLanes([])}
 function initLanes(){autoLanes=$('nl').value==='auto';samples=[];setN(autoLanes?3:+$('nl').value)}
-function oldInit(){const n=4;bottom=[];for(let i=0;i<=n;i++)bottom.push(0.05+0.9*i/n);est=Array(n).fill(null);tracks=[];renderLanes([])}
 $('nl').onchange=initLanes;initLanes();
 $('ego').oninput=()=>$('egoV').textContent=$('ego').value;
 $('view').onchange=()=>{$('egoL').style.display=($('view').value==='dash'&&!usingCam)?'flex':'none';est=est.map(()=>null)};
