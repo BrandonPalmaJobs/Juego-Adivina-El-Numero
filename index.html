@@ -55,22 +55,23 @@ a{color:var(--acc)}
 <label><input type="checkbox" id="adapt" checked> Ajustar solo si cambian</label>
 <span id="lanesInfo" class="note"></span>
 <label><input type="checkbox" id="voice" checked> Avisos por voz</label>
+<label><input type="checkbox" id="autovp"> Horizonte automático (beta)</label>
 <label>Vista <select id="view"><option value="dash">Desde el carro</option><option value="fixed">Cámara fija / puente</option></select></label>
 <label>Modelo <select id="mdl"><option value="lite_mobilenet_v2">Rápido (lite)</option><option value="mobilenet_v2">Preciso</option></select></label>
 <label>Análisis <select id="fps"><option value="auto" selected>Auto (ahorra batería)</option><option value="4">4 cuadros/s</option><option value="8">8 cuadros/s</option><option value="15">15 cuadros/s</option></select></label>
 <label id="egoL">Tu velocidad <input type="range" id="ego" min="0" max="80" value="20"> <b id="egoV">20</b> km/h</label>
 </div>
-<div class="note" style="margin-top:6px" id="hint">Con <b>Ajustar solo si cambian</b> la app revisa los carriles cada par de segundos con las líneas pintadas y con la posición de los coches. Si el camino pasa de 4 a 3 o de 4 a 5 carriles, cambia sola y te avisa por voz. El número que elijas es solo el punto de partida. Si arrastras los puntos blancos, se fija tu ajuste manual.</div>
+<div class="note" style="margin-top:6px" id="hint">Con <b>Ajustar solo si cambian</b> la app revisa los carriles cada par de segundos con las líneas pintadas y con la posición de los coches. Si el camino pasa de 4 a 3 o de 4 a 5 carriles, cambia sola y te avisa por voz. El número que elijas es solo el punto de partida. Si arrastras los puntos de abajo, se fija tu ajuste manual. El punto de arriba es el horizonte (donde se juntan las líneas): acomódalo una vez al inicio; con eso no se apaga la detección automática.</div>
 </div>
 
-<div class="card"><div class="lanes" id="lanes"></div><div class="note" id="sys" style="margin-top:6px"></div></div>
+<div class="card"><div class="lanes" id="lanes"></div><div id="side" class="note" style="margin-top:8px;display:none;background:#20242c;border-radius:8px;padding:6px 10px"></div><div class="note" id="sys" style="margin-top:6px"></div></div>
 <div id="driveUI" style="display:none;position:fixed;inset:0;background:#000;z-index:9;color:#fff;text-align:center;flex-direction:column;justify-content:center;align-items:center;padding:20px">
 <div id="dArrow" style="font-size:120px;line-height:1">⬆︎</div><div id="dText" style="font-size:30px;font-weight:800;margin-top:10px">Analizando…</div>
-<div id="dLanes" style="display:flex;gap:8px;margin-top:24px"></div><div id="dAlert" style="margin-top:20px;font-size:22px;color:#eb5757;font-weight:700"></div><div id="dGps" style="margin-top:10px;font-size:16px;color:#f2c94c"></div>
+<div id="dLanes" style="display:flex;gap:8px;margin-top:24px"></div><div id="dAlert" style="margin-top:20px;font-size:22px;color:#eb5757;font-weight:700"></div><div id="dSide" style="margin-top:10px;font-size:18px;color:#56ccf2"></div><div id="dGps" style="margin-top:10px;font-size:16px;color:#f2c94c"></div>
 <div style="position:absolute;bottom:20px;left:0;right:0;font-size:13px;color:#888">Avisos por voz activos · No mires la pantalla mientras manejas<br><button id="exitDrive" style="margin-top:10px;background:#333">Salir</button></div></div>
 
 <div class="card note">
-<b>Puentes y cambios de carriles:</b> la app vuelve a calcular el horizonte y los carriles cada 2 segundos. Al subir o bajar un puente (por ejemplo, de 6 carriles a 2 o de 2 a 6) se ajusta sola en unos 4 segundos y te avisa por voz.<br><br><b>GPS:</b> solo necesitas la ubicación del teléfono encendida y dar permiso una vez; Google Maps no hace falta. Si no hay señal, la app te avisa.<br><br><b>Modo manejo:</b> deja la pantalla en negro con una flecha grande y te avisa todo por voz, también cuando un carril se queda detenido (choque, obra, pesero parado). Úsalo con el celular en soporte; no lo manipules mientras manejas.<br><br><b>Manos libres:</b> con la cámara, tu velocidad sale del GPS, los carriles se detectan solos, la pantalla se queda encendida y los avisos son por voz. Pon el celular en el soporte, apuntando al frente.<br><br><b>Cómo mide:</b> un modelo COCO-SSD detecta coches, autobuses y camiones en cada cuadro, directo en tu teléfono: el video no se sube a ningún lado. A cada coche se le asigna un carril según dónde están sus llantas respecto a las líneas. Para la velocidad, compara su tamaño de un cuadro a otro: si se hace más chico, se está alejando. Esa velocidad relativa se suma a la tuya, que sale del GPS si usas la cámara o del control si usas un video.<br>
+<b>Laterales:</b> solo se cuentan los carriles de tu vía. Los coches detrás de una barrera o fuera de la última línea (la lateral) salen en azul claro y aparte: la app te dice su velocidad y te avisa si la lateral va bastante más rápido.<br><br><b>Puentes y cambios de carriles:</b> la app vuelve a contar los carriles cada 2 segundos. El horizonte automático para pendientes todavía está en prueba: actívalo en ajustes. Al subir o bajar un puente (por ejemplo, de 6 carriles a 2 o de 2 a 6) se ajusta sola en unos 4 segundos y te avisa por voz.<br><br><b>GPS:</b> solo necesitas la ubicación del teléfono encendida y dar permiso una vez; Google Maps no hace falta. Si no hay señal, la app te avisa.<br><br><b>Modo manejo:</b> deja la pantalla en negro con una flecha grande y te avisa todo por voz, también cuando un carril se queda detenido (choque, obra, pesero parado). Úsalo con el celular en soporte; no lo manipules mientras manejas.<br><br><b>Manos libres:</b> con la cámara, tu velocidad sale del GPS, los carriles se detectan solos, la pantalla se queda encendida y los avisos son por voz. Pon el celular en el soporte, apuntando al frente.<br><br><b>Cómo mide:</b> un modelo COCO-SSD detecta coches, autobuses y camiones en cada cuadro, directo en tu teléfono: el video no se sube a ningún lado. A cada coche se le asigna un carril según dónde están sus llantas respecto a las líneas. Para la velocidad, compara su tamaño de un cuadro a otro: si se hace más chico, se está alejando. Esa velocidad relativa se suma a la tuya, que sale del GPS si usas la cámara o del control si usas un video.<br>
 En vista de cámara fija, la velocidad es la del movimiento hacia arriba o hacia abajo en la imagen (relativa entre carriles).<br>
 Los números son aproximados: sirven para comparar los carriles entre sí, no como un velocímetro.
 </div>
@@ -150,12 +151,16 @@ async function loop(){
     procMs=procMs*0.8+(performance.now()-t0)*0.2;
     const now=performance.now()/1000;
     track(preds,W,H,now);
-    if(autoLanes){scanLines();if(now-lastFit>2){lastFit=now;fitVP();fitLanes()}}
+    if(autoLanes){scanLines();if(now-lastFit>2){lastFit=now;if($('autovp').checked)fitVP();fitLanes()}}
     const ego=$('view').value==='dash'?(usingCam?(gpsV??0):+$('ego').value):0;
     const n=bottom.length-1,cnt=Array(n).fill(0);
     for(let l=0;l<n;l++){const tl=tracks.filter(t=>t.lane===l&&t.miss===0);cnt[l]=tl.length;
       const rs=tl.filter(t=>t.r!=null&&t.age>=3&&Math.abs(t.r)<120).map(t=>t.r).sort((a,b)=>a-b);
       if(rs.length){const med=rs[Math.floor(rs.length/2)];const m=Math.max(0,ego+med);est[l]=est[l]==null?m:est[l]*0.85+m*0.15}}
+    for(const sd of ['L','R']){const rs=tracks.filter(t=>t.side===sd&&t.miss===0&&t.r!=null&&t.age>=3&&Math.abs(t.r)<120).map(t=>t.r).sort((a,b)=>a-b);
+      if(rs.length>=2){const m=Math.max(0,ego+rs[Math.floor(rs.length/2)]);sideEst[sd]=sideEst[sd]==null?m:sideEst[sd]*0.85+m*0.15}
+      else if(!tracks.some(t=>t.side===sd&&t.miss===0))sideEst[sd]=sideEst[sd]==null?null:(sideEst[sd]*0.98)}
+    checkSide(now);
     checkBlocked(now,ego);
     draw();renderLanes(cnt);
     $('sys').textContent=targetFps()+' cuadros/s · '+Math.round(procMs)+' ms por cuadro'+(lowBatt?' · batería baja: modo ahorro':'')+(lowLight?' · poca luz':'');
@@ -182,7 +187,13 @@ function track(preds,W,H,now){
   tracks=tracks.filter(t=>t.miss<10);
 }
 function setLane(t){const cx=t.b[0]+t.b[2]/2,by=t.b[1]+t.b[3];t.lane=laneOf(cx,by);
-  if(autoLanes&&by>vp.y+0.08){samples.push({x:toBottom(cx,by),t:t.t});while(samples.length&&t.t-samples[0].t>25)samples.shift()}}
+  t.side=null;if(t.lane<0&&by>vp.y+0.02){const xb=toBottom(cx,by),edge=(bottom[1]-bottom[0])*0.25;
+    if(xb>bottom[bottom.length-1]+edge)t.side='R';else if(xb<bottom[0]-edge)t.side='L'}
+  if(autoLanes&&by>vp.y+0.08&&!onSideFar(cx,by)){samples.push({x:toBottom(cx,by),t:t.t});while(samples.length&&t.t-samples[0].t>25)samples.shift()}}
+// coches muy por fuera de las líneas detectadas (lateral) no se usan para contar tus carriles
+function onSideFar(cx,by){if(!lineHist)return false;const xb=toBottom(cx,by),w=(bottom[bottom.length-1]-bottom[0])/(bottom.length-1);
+  return src0==='líneas'&&(xb>bottom[bottom.length-1]+w*0.6||xb<bottom[0]-w*0.6)}
+let src0='',sideEst={L:null,R:null},sideFastSince=null;
 function update(t,d,now){const dt=Math.max(1e-3,now-t.t);
   const a=0.5;t.vx=t.vx*a+((d.b[0]-t.b[0])/dt)*(1-a);t.vy=t.vy*a+((d.b[1]-t.b[1])/dt)*(1-a);t.vs=t.vs*a+((d.b[3]/t.b[3]-1)/dt)*(1-a);
   const prevZ=t.z,prevBy=t.b[1]+t.b[3];t.b=d.b;t.t=now;t.cls=d.cls;t.miss=0;t.age++;setLane(t);
@@ -195,6 +206,14 @@ const LANE_M=3.5,FNORM=0.78;
 function distM(t){const by=t.b[1]+t.b[3];const tt=(by-vp.y)/(1-vp.y);if(tt<=0.02)return null;
   const wn=(bottom[bottom.length-1]-bottom[0])/(bottom.length-1);return LANE_M*FNORM/(wn*tt)}
 // carril bloqueado: casi detenido mientras otros avanzan
+function checkSide(now){const main=est.filter(x=>x!=null);const bestMain=main.length?Math.max(...main):null;
+  const parts=[];let fast=null;
+  for(const[sd,name]of[['L','izquierda'],['R','derecha']]){const e=sideEst[sd];if(e==null)continue;
+    parts.push('Lateral '+name+': <b>'+e.toFixed(0)+' km/h</b>');if(bestMain!=null&&e>bestMain*1.3+5)fast=name}
+  const el=$('side');el.style.display=parts.length?'block':'none';
+  el.innerHTML=parts.length?'↔︎ Fuera de tu vía (no cuenta como carril): '+parts.join(' · ')+(fast?' · <span style="color:#2fbf71">va más rápido</span>':''):'';
+  $('dSide').textContent=fast?'La lateral '+fast+' va más rápido':'';
+  if(fast){sideFastSince=sideFastSince??now;if(now-sideFastSince>10){say('La lateral '+fast+' va más rápido');sideFastSince=now+60}}else sideFastSince=null}
 const stopSince={};
 function checkBlocked(now,ego){const n=est.length;let alert=-1;
   const moving=est.filter(x=>x!=null&&x>15).length;
@@ -217,7 +236,7 @@ function scanLines(){
     let run=-1;
     for(let x=0;x<=160;x++){let on=false;
       if(x<160){const o=(y*160+x)*4,R=d[o],G=d[o+1],B=d[o+2],br=(R+G+B)/3;
-        const white=br>mean+thW&&Math.max(R,G,B)-Math.min(R,G,B)<40, yellow=R>140&&G>110&&B<G-40&&br>mean+25;on=white||yellow}
+        const white=br>mean+thW&&Math.max(R,G,B)-Math.min(R,G,B)<40, yellow=R>140&&G>110&&G>R*0.65&&B<G-40&&br>mean+25;on=white||yellow}
       if(on&&run<0)run=x;
       if(!on&&run>=0){const w=x-run;if(w<=6){const px=(run+w/2)/160,py=y/90;linePts.push(px,py,performance.now());const xb=toBottom(px,py),k=bin(xb);if(k>=0&&k<NB)lineHist[k]+=1}run=-1}}
   }
@@ -228,10 +247,15 @@ let lowLight=false,linePts=[];
 // Se mueve al subir o bajar un puente o en pendientes, donde el horizonte cambia de altura.
 function fitVP(){const now=performance.now();let k=0;while(k<linePts.length&&now-linePts[k+2]>3000)k+=3;if(k)linePts=linePts.slice(k);
   const N=linePts.length/3;if(N<150)return;
-  let best=null,bs=-1;
-  for(let vy=Math.max(0.15,vp.y-0.12);vy<=Math.min(0.75,vp.y+0.12);vy+=0.02)for(let vx=Math.max(0.2,vp.x-0.15);vx<=Math.min(0.8,vp.x+0.15);vx+=0.025){
-    const h=new Float32Array(NB);for(let i=0;i<linePts.length;i+=3){const px=linePts[i],py=linePts[i+1];const tt=(py-vy)/(1-vy);if(tt<=0.05)continue;const b=Math.floor(((vx+(px-vx)/tt)-LO)/(HI-LO)*NB);if(b>=0&&b<NB)h[b]++}
-    let sc=0;for(let b=0;b<NB;b++)sc+=h[b]*h[b];if(sc>bs){bs=sc;best=[vx,vy]}}
+  let best=null,bs=-1,cur=-1;const xs=new Float32Array(N);
+  const cands=[[vp.x,vp.y]];for(let vy=Math.max(0.25,vp.y-0.08);vy<=Math.min(0.6,vp.y+0.08);vy+=0.02)for(let vx=Math.max(0.3,vp.x-0.12);vx<=Math.min(0.7,vp.x+0.12);vx+=0.03)cands.push([vx,vy]);
+  for(const[vx,vy]of cands){
+    let m=0,c=0;for(let i=0,j=0;i<linePts.length;i+=3,j++){const tt=(linePts[i+1]-vy)/(1-vy);xs[j]=tt>0.05?vx+(linePts[i]-vx)/tt:NaN;if(xs[j]===xs[j]){m+=xs[j];c++}}
+    if(c<100)continue;m/=c;let sd=0;for(let j=0;j<N;j++)if(xs[j]===xs[j])sd+=(xs[j]-m)**2;sd=Math.sqrt(sd/c)||1;
+    // histograma en unidades de la dispersión: así no gana "aplastar" todo, sino alinear las líneas
+    const h=new Float32Array(48);for(let j=0;j<N;j++){if(xs[j]!==xs[j])continue;const b=Math.floor(((xs[j]-m)/sd+2.4)/4.8*48);if(b>=0&&b<48)h[b]++}
+    let sc=0;for(let b=0;b<48;b++)sc+=h[b]*h[b];sc/=c*c;if(cur<0)cur=sc;if(sc>bs){bs=sc;best=[vx,vy]}}
+  if(cur>0&&bs<cur*1.25)return; // sin evidencia clara, no se mueve
   if(best){vp.x=vp.x*0.4+best[0]*0.6;vp.y=vp.y*0.4+best[1]*0.6}}
 function peaks(h,thrFrac,minSep){const sm=h.map((_,i)=>(h[i-2]||0)*0.5+(h[i-1]||0)+h[i]*1.5+(h[i+1]||0)+(h[i+2]||0)*0.5);
   const mx=Math.max(...sm);if(mx<=0)return[];let pk=[];
@@ -249,6 +273,7 @@ function fitLanes(){
     if(c.length>=1&&c.length<=6&&(c.length>1||samples.length>60)){if(c.length===1)c.push(c[0]+0.3);nb=[c[0]-(c[1]-c[0])/2];for(let j=0;j<c.length-1;j++)nb.push((c[j]+c[j+1])/2);nb.push(c[c.length-1]+(c[c.length-1]-c[c.length-2])/2);src='coches'}}
   if(!nb)return;
   const n=nb.length-1,cur=bottom.length-1;
+  src0=src;
   if(n===cur){bottom=bottom.map((b,i)=>b*0.7+nb[i]*0.3);pendCount=0;$('lanesInfo').textContent=n+' carriles ('+src+')';return}
   // histéresis: el cambio debe verse 2 veces seguidas (~4 s) para evitar saltos
   if(n===pendN)pendCount++;else{pendN=n;pendCount=1}
@@ -267,9 +292,9 @@ function draw(){
   ctx.fillStyle='#fff';[[vp.x,vp.y],...bottom.map(b=>[b,0.97])].forEach(([x,y])=>{ctx.beginPath();ctx.arc(x*W,y*H,7*d,0,7);ctx.fill()});
   // detecciones
   ctx.font=(11*d)+'px system-ui';
-  for(const t of tracks){if(t.miss)continue;const [x,y,w,h]=t.b;const c=t.lane>=0?colors[t.lane]:'#999';
+  for(const t of tracks){if(t.miss)continue;const [x,y,w,h]=t.b;const c=t.lane>=0?colors[t.lane]:t.side?'#56ccf2':'#999';
     ctx.strokeStyle=c;ctx.lineWidth=2*d;ctx.strokeRect(x*W,y*H,w*W,h*H);
-    const lab=(t.lane>=0?'C'+(t.lane+1)+' ':'')+t.cls;ctx.fillStyle=c;ctx.fillRect(x*W,y*H-14*d,ctx.measureText(lab).width+6*d,14*d);ctx.fillStyle='#000';ctx.fillText(lab,x*W+3*d,y*H-3*d)}
+    const lab=(t.lane>=0?'C'+(t.lane+1)+' ':t.side?'lateral ':'')+t.cls;ctx.fillStyle=c;ctx.fillRect(x*W,y*H-14*d,ctx.measureText(lab).width+6*d,14*d);ctx.fillStyle='#000';ctx.fillText(lab,x*W+3*d,y*H-3*d)}
 }
 function renderLanes(cnt){
   const n=bottom.length-1;document.documentElement.style.setProperty('--n',n);
